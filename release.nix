@@ -95,10 +95,13 @@ let
         name = "ionmonkey";
         src = tarball;
         buildInputs = with pkgs; [ python ];
-        buildCommand = ''
-          python ./js/src/jit-test/jit_test.py ${opts} ${build}/bin/js
+        dontBuild = true;
+        checkPhase = ''
+          python $src/js/src/jit-test/jit_test.py ${opts} ${build}/bin/js
           touch $out
         '';
+        dontInstall = true;
+        dontFixup = true;
 
         meta = {
           description = "Run test suites.";
