@@ -70,31 +70,41 @@ let
           ./config/nsinstall -t js $out/bin
         '';
         doCheck = false;
+
+        meta = {
+          description = "Build JS shell.";
+          # Should think about reducing the priority of i686-linux.
+          schedulingPriority = "100";
+        };
       };
 
-      /*
     jsCheck =
       { tarball ? jobs.tarball {}
       , build ? jobs.jsBuild {}
       , system ? builtins.currentSystem
+      , jitTestOpt ? ""
+      , jitTestIM ? true
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
+      let opts =
+        if jitTestIM then "--ion-tbpl ${jitTestOpt}"
+        else jitTestOpt;
+      in
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey";
         src = tarball;
-        postUnpack = ''
-          sourceRoot=$sourceRoot/js/src
-          echo Compile in $sourceRoot
-        '';
         buildInputs = with pkgs; [ python ];
-        configureFlags = [ "--enable-debug" "--disable-optimize" ];
-        postInstall = ''
-          test -x ./js && cp ./js $out/bin/js
+        buildCommand = ''
+          python ./js/src/jit-test/jit_test.py ${opts} ${build}/bin/js
+          touch $out
         '';
-        doCheck = false;
+
+        meta = {
+          description = "Run test suites.";
+          schedulingPriority = if jitTestIM then "50" else "10";
+        };
       };
-      */
   };
 
 in
