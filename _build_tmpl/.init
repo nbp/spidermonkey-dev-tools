@@ -1,0 +1,21 @@
+: {PROFILE_DIR=/home/nicolas/mozilla/}
+export PROFILE_DIR
+export CONFIG_SITE=$PROFILE_DIR/config.site
+export USERNAME="Nicolas B. Pierron"
+export EMAIL=npierron@mozilla.com
+export SMTPSERVER=smtp.mozilla.org
+export PYTHONPATH=".:$PYTHONPATH"
+export PYTHONUSERBASE=""
+for i in $PROFILE_DIR/.nix-profile/lib/python*/*/*.egg :; do
+  test "$i" = : && continue
+  p=$(readlink $i)
+  export PYTHONUSERBASE="${PYTHON_USER_BASE:+$PYTHON_USER_BASE:}${p%%/lib*}"
+done
+
+export PATH=$PROFILE_DIR/.usr/bin:$PATH
+
+export INCLUDE=$PROFILE_DIR/.nix-profile/include/freetype2:$INCLUDE
+export C_INCLUDE_PATH=$INCLUDE
+export CPLUS_INCLUDE_PATH=$INCLUDE
+
+# export PKG_CONFIG_PATH=$(find $(nix-store -q -R $PROFILE_DIR/.nix-profile) -type d -name pkgconfig -printf '%p:')
