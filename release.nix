@@ -67,10 +67,34 @@ let
         buildInputs = with pkgs; [ perl python ];
         configureFlags = [ "--enable-debug" "--disable-optimize" ];
         postInstall = ''
+          ./config/nsinstall -t js $out/bin
+        '';
+        doCheck = false;
+      };
+
+      /*
+    jsCheck =
+      { tarball ? jobs.tarball {}
+      , build ? jobs.jsBuild {}
+      , system ? builtins.currentSystem
+      }:
+
+      let pkgs = import nixpkgs { inherit system; }; in
+      pkgs.releaseTools.nixBuild {
+        name = "ionmonkey";
+        src = tarball;
+        postUnpack = ''
+          sourceRoot=$sourceRoot/js/src
+          echo Compile in $sourceRoot
+        '';
+        buildInputs = with pkgs; [ python ];
+        configureFlags = [ "--enable-debug" "--disable-optimize" ];
+        postInstall = ''
           test -x ./js && cp ./js $out/bin/js
         '';
         doCheck = false;
       };
+      */
   };
 
 in
