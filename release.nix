@@ -64,12 +64,8 @@ let
           sourceRoot=$sourceRoot/js/src
           echo Compile in $sourceRoot
         '';
-        addInputsHook = ''
-          addToSearchPath PATH ${pkgs.perl}/bin
-          addToSearchPath PATH ${pkgs.python}/bin
-        '';
-        buildInput = with pkgs; [
-          perl python autoconf213 pkgconfig
+        buildInputs = with pkgs; [
+          perl python
         ];
         configureFlags = [ "--enable-debug" "--disable-optimize" ];
       };
