@@ -64,10 +64,9 @@ let
           sourceRoot=$sourceRoot/js/src
           echo Compile in $sourceRoot
         '';
-        buildInputs = with pkgs; [
-          perl python
-        ];
+        buildInputs = with pkgs; [ perl python ];
         configureFlags = [ "--enable-debug" "--disable-optimize" ];
+        doCheck = false;
       };
   };
 
