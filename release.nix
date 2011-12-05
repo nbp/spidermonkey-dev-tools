@@ -97,7 +97,7 @@ let
         buildInputs = with pkgs; [ python ];
         dontBuild = true;
         checkPhase = ''
-          python $src/js/src/jit-test/jit_test.py ${opts} ${build}/bin/js
+          python ./js/src/jit-test/jit_test.py ${opts} ${build}/bin/js
           touch $out
         '';
         dontInstall = true;
