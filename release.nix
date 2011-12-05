@@ -43,7 +43,7 @@ let
           dir=$(basename $(pwd))
           cd ..
           ensureDir "$out/tarballs"
-          tar --exclude-vcs caf "$out/tarballs/$dir.tar.bz2" $dir
+          tar --exclude-vcs -caf "$out/tarballs/$dir.tar.bz2" $dir
           cd -
 
           runHook postDist
