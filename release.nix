@@ -66,6 +66,9 @@ let
         '';
         buildInputs = with pkgs; [ perl python ];
         configureFlags = [ "--enable-debug" "--disable-optimize" ];
+        postInstall = ''
+          test -x ./js && cp ./js $out/bin/js
+        '';
         doCheck = false;
       };
   };
