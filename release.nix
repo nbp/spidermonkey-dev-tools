@@ -54,10 +54,12 @@ let
     jsBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
+      , override ? {}
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
-      pkgs.releaseTools.nixBuild {
+      with pkgs.lib;
+      pkgs.releaseTools.nixBuild ({
         name = "ionmonkey";
         src = tarball;
         postUnpack = ''
@@ -74,13 +76,38 @@ let
         meta = {
           description = "Build JS shell.";
           # Should think about reducing the priority of i686-linux.
-          schedulingPriority = "100";
+          schedulingPriority =
+            if system != "armv7l-linux" then "100"
+            else "50";
         };
-      };
+      } // override);
+
+    jsBuildNoMJIT =
+      { tarball ? jobs.tarball {}
+      , system ? "armv7l-linux" # builtins.currentSystem
+      , override ? {}
+      } @ args:
+
+      let pkgs = import nixpkgs { inherit system; }; in
+      jsBuild (args // {
+        override = {
+          name = "ionmonkey-no-mjit";
+
+          configureFlags = [ "--enable-debug" "--disable-optimize" "--disable-methodjit" ];
+
+          meta = {
+            description = "Build JS shell without methodJit.";
+            # Should think about reducing the priority of i686-linux.
+            schedulingPriority =
+              if system != "armv7l-linux" then "50"
+              else "100";
+          };
+        } // args.override;
+      });
 
     jsCheck =
       { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuild {}
+      , build ? jobs.jsBuild { }
       , system ? builtins.currentSystem
       , jitTestOpt ? ""
       , jitTestIM ? true
@@ -92,7 +119,7 @@ let
         else jitTestOpt;
       in
       pkgs.releaseTools.nixBuild {
-        name = "ionmonkey";
+        name = "ionmonkey-check";
         src = tarball;
         buildInputs = with pkgs; [ python ];
         dontBuild = true;
