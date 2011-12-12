@@ -5,6 +5,30 @@
 let
   pkgs = import nixpkgs {};
 
+  defaultJsBuild =
+    { tarball ? jobs.tarball {}
+    , system ? builtins.currentSystem
+    , override ? {}
+    }:
+
+    let pkgs = import nixpkgs { inherit system; }; in
+    with pkgs.lib;
+    pkgs.releaseTools.nixBuild ({
+      src = tarball;
+      postUnpack = ''
+        sourceRoot=$sourceRoot/js/src
+        echo Compile in $sourceRoot
+      '';
+      buildInputs = with pkgs; [ perl python ];
+      configureFlags = [ "--enable-debug" "--disable-optimize" ];
+      postInstall = ''
+        ./config/nsinstall -t js $out/bin
+      '';
+      doCheck = false;
+    } // override);
+
+
+
   jobs = rec {
     tarball =
       { ionmonkeySrc ? { outPath = <ionmonkey>; }
@@ -54,42 +78,28 @@ let
     jsBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
-      , override ? {}
-      }:
+      } @ args:
 
-      let pkgs = import nixpkgs { inherit system; }; in
-      with pkgs.lib;
-      pkgs.releaseTools.nixBuild ({
-        name = "ionmonkey";
-        src = tarball;
-        postUnpack = ''
-          sourceRoot=$sourceRoot/js/src
-          echo Compile in $sourceRoot
-        '';
-        buildInputs = with pkgs; [ perl python ];
-        configureFlags = [ "--enable-debug" "--disable-optimize" ];
-        postInstall = ''
-          ./config/nsinstall -t js $out/bin
-        '';
-        doCheck = false;
+      defaultJsBuild (args // {
+        override = {
+          name = "ionmonkey";
 
-        meta = {
-          description = "Build JS shell.";
-          # Should think about reducing the priority of i686-linux.
-          schedulingPriority =
-            if system != "armv7l-linux" then "100"
-            else "50";
+          meta = {
+            description = "Build JS shell.";
+            # Should think about reducing the priority of i686-linux.
+            schedulingPriority =
+              if system != "armv7l-linux" then "100"
+              else "50";
+          };
         };
-      } // override);
+      });
 
     jsBuildNoMJIT =
       { tarball ? jobs.tarball {}
       , system ? "armv7l-linux" # builtins.currentSystem
-      , override ? {}
       } @ args:
 
-      let pkgs = import nixpkgs { inherit system; }; in
-      jsBuild (args // {
+      defaultJsBuild (args // {
         override = {
           name = "ionmonkey-no-mjit";
 
@@ -102,7 +112,7 @@ let
               if system != "armv7l-linux" then "50"
               else "100";
           };
-        } // args.override;
+        };
       });
 
     jsCheck =
