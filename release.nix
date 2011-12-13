@@ -96,8 +96,6 @@ let
         '';
         doCheck = false;
 
-        name = "ionmonkey";
-
         meta = {
           description = "Build JS shell.";
           # Should think about reducing the priority of i686-linux.
