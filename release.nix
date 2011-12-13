@@ -162,7 +162,7 @@ let
         IONFLAGS="all";
         checkPhase = ''
           ensureDir $out
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js 2>&1 | tee ./log | grep TEST-
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee ./log | grep TEST-
           cat  > $out/failures.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
