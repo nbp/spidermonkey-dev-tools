@@ -148,7 +148,7 @@ let
 
     jsIonStats =
       { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuildNoJIT { }
+      , build ? jobs.jsBuildNoMJIT { }
       , system ? builtins.currentSystem
       }:
 
