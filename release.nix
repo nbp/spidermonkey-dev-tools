@@ -111,7 +111,7 @@ let
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
-      let build = jobs.jsBuild { inherit tarball system; } in
+      let build = jobs.jsBuild { inherit tarball system; }; in
       with pkgs.lib;
 
       pkgs.lib.overrideDerivation build (attrs: {
@@ -133,14 +133,10 @@ let
       , build ? jobs.jsBuildNoJIT { }
       , system ? builtins.currentSystem
       , jitTestOpt ? ""
-      , jitTestIM ? true
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
-      let opts =
-        if jitTestIM then "--ion-tbpl ${jitTestOpt}"
-        else jitTestOpt;
-      in
+      let opts = jitTestOpt; in
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-check";
         src = tarball;
@@ -155,7 +151,7 @@ let
 
         meta = {
           description = "Run test suites.";
-          schedulingPriority = if jitTestIM then "50" else "10";
+          schedulingPriority = "10";
         };
       };
 
@@ -195,7 +191,7 @@ let
 
         meta = {
           description = "Run test suites to collect compilation stats.";
-          schedulingPriority = if jitTestIM then "50" else "10";
+          schedulingPriority = "50";
         };
       };
   };
