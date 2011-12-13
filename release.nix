@@ -114,18 +114,9 @@ let
       let build = jobs.jsBuild { inherit tarball system; }; in
       with pkgs.lib;
 
-      pkgs.lib.overrideDerivation jsBuild (attrs: {
+      pkgs.lib.overrideDerivation build (attrs: {
         name = "ionmonkey-no-mjit";
-
         configureFlags = attrs.configureFlags ++ [ "--disable-methodjit" ];
-
-        meta = {
-          description = "Build JS shell without methodJit.";
-          # Should think about reducing the priority of i686-linux.
-          schedulingPriority =
-            if system != "armv7l-linux" then "50"
-            else "100";
-        };
       });
 
     jsCheck =
