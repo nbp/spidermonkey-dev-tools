@@ -114,7 +114,7 @@ let
       let build = jobs.jsBuild { inherit tarball system; }; in
       with pkgs.lib;
 
-      pkgs.lib.overrideDerivation build (attrs: {
+      pkgs.lib.overrideDerivation jsBuild (attrs: {
         name = "ionmonkey-no-mjit";
 
         configureFlags = attrs.configureFlags ++ [ "--disable-methodjit" ];
