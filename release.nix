@@ -78,46 +78,61 @@ let
     jsBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
-      } @ args:
+      }:
 
-      defaultJsBuild (args // {
-        override = {
-          name = "ionmonkey";
+      let pkgs = import nixpkgs { inherit system; }; in
+      with pkgs.lib;
+      pkgs.releaseTools.nixBuild {
+        name = "ionmonkey";
+        src = tarball;
+        postUnpack = ''
+          sourceRoot=$sourceRoot/js/src
+          echo Compile in $sourceRoot
+        '';
+        buildInputs = with pkgs; [ perl python ];
+        configureFlags = [ "--enable-debug" "--disable-optimize" ];
+        postInstall = ''
+          ./config/nsinstall -t js $out/bin
+        '';
+        doCheck = false;
 
-          meta = {
-            description = "Build JS shell.";
-            # Should think about reducing the priority of i686-linux.
-            schedulingPriority =
-              if system != "armv7l-linux" then "100"
-              else "50";
-          };
+        name = "ionmonkey";
+
+        meta = {
+          description = "Build JS shell.";
+          # Should think about reducing the priority of i686-linux.
+          schedulingPriority =
+            if system != "armv7l-linux" then "100"
+            else "50";
         };
-      });
+      };
 
     jsBuildNoMJIT =
       { tarball ? jobs.tarball {}
-      , system ? "armv7l-linux" # builtins.currentSystem
-      } @ args:
+      , system ? builtins.currentSystem
+      }:
 
-      defaultJsBuild (args // {
-        override = {
-          name = "ionmonkey-no-mjit";
+      let pkgs = import nixpkgs { inherit system; }; in
+      let build = jobs.jsBuild { inherit tarball system; } in
+      with pkgs.lib;
 
-          configureFlags = [ "--enable-debug" "--disable-optimize" "--disable-methodjit" ];
+      pkgs.lib.overrideDerivation build (attrs: {
+        name = "ionmonkey-no-mjit";
 
-          meta = {
-            description = "Build JS shell without methodJit.";
-            # Should think about reducing the priority of i686-linux.
-            schedulingPriority =
-              if system != "armv7l-linux" then "50"
-              else "100";
-          };
+        configureFlags = attrs.configureFlags ++ [ "--disable-methodjit" ];
+
+        meta = {
+          description = "Build JS shell without methodJit.";
+          # Should think about reducing the priority of i686-linux.
+          schedulingPriority =
+            if system != "armv7l-linux" then "50"
+            else "100";
         };
       });
 
     jsCheck =
       { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuild { }
+      , build ? jobs.jsBuildNoJIT { }
       , system ? builtins.currentSystem
       , jitTestOpt ? ""
       , jitTestIM ? true
@@ -134,14 +149,54 @@ let
         buildInputs = with pkgs; [ python ];
         dontBuild = true;
         checkPhase = ''
+          ensureDir $out
           python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f ${opts} ${build}/bin/js
-          touch $out
         '';
         dontInstall = true;
         dontFixup = true;
 
         meta = {
           description = "Run test suites.";
+          schedulingPriority = if jitTestIM then "50" else "10";
+        };
+      };
+
+    jsIonStats =
+      { tarball ? jobs.tarball {}
+      , build ? jobs.jsBuildNoJIT { }
+      , system ? builtins.currentSystem
+      }:
+
+      let pkgs = import nixpkgs { inherit system; }; in
+
+      pkgs.releaseTools.nixBuild {
+        name = "ionmonkey-check";
+        src = tarball;
+        buildInputs = with pkgs; [ python ];
+        dontBuild = true;
+        IONFLAGS="all";
+        checkPhase = ''
+          ensureDir $out
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js 2>&1 | tee ./log | grep TEST-
+          cat  > $out/failures.html <<EOF
+          <head><title>Compilation stats of IonMonkey</title></head>
+          <body>
+          <p>Number of compilation failures : $(grep -c "\[Abort\] IM Compilation failed." ./log)</p>
+          <p>Unsupported opcode (sorted):
+          <ol>
+          $(sed -n "/Unsupported opcode/ { s,(line .*),,; p }" ./log | sort | uniq -c | sort -nr | sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,')
+          </ol></p>
+          <p>Number of GVN congruence : $(grep -c "\[GVN\] marked"  ./log)</p>
+          <p>Number of snapshots : $(grep -c "\[Snapshots\] Assigning snapshot" ./log)</p>
+          <p>Number of bailouts : $(grep -c "\[Bailouts\] Bailing out" ./log)</p>
+          </body>
+          EOF
+        '';
+        dontInstall = true;
+        dontFixup = true;
+
+        meta = {
+          description = "Run test suites to collect compilation stats.";
           schedulingPriority = if jitTestIM then "50" else "10";
         };
       };
