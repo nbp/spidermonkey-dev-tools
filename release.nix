@@ -207,7 +207,7 @@ let
       };
   };
 
-  speedTest = mode: gvn: licm: ra: inline:
+  speedTest = mode: gvn: licm: ra: inline: osr:
     with pkgs.lib;
     let
       name = ""
@@ -227,6 +227,9 @@ let
       + "_"
       + optionalString (inline == "off") "INLn"
       + optionalString (inline == "on")  "INLy"
+      + "_"
+      + optionalString (osr == "off") "OSRn"
+      + optionalString (osr == "on")  "OSRy"
       ;
 
       args = "--ion"
@@ -236,13 +239,14 @@ let
       + " --ion-licm=${licm}"
       + " --ion-regalloc=${ra}"
       + " --ion-inlining=${inline}"
+      + " --ion-osr=${osr}"
       ;
     in
 
     setAttrByPath [ ("jsSpeedCheckIon_" + name) ] (
-      { tarball ? jobs.tarball {}
-      , optBuild ? jobs.jsOptBuildNoMJIT { }
-      , system ? builtins.currentSystem
+      { tarball # ? jobs.tarball {}
+      , optBuild # ? jobs.jsOptBuildNoMJIT { }
+      , system # ? builtins.currentSystem
       }:
 
       let
@@ -265,8 +269,9 @@ let
     flip concatMap [ "off" "pessimistic" "optimistic" ] (gvn:
     flip concatMap [ "off" "on" ] (licm:
     flip concatMap [ "greedy" "lsra" ] (ra:
-    flip map [ "on" "off" ] (inline:
-      speedTest mode gvn licm ra inline
+    flip concatMap [ "on" "off" ] (inline:
+    flip map [ "on" "off" ] (osr:
+      speedTest mode gvn licm ra inline osr
     ))))));
 
 in

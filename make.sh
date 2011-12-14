@@ -341,11 +341,15 @@ for phase in $phase_sel_case; do
             for inline in on off; do
                 inline_opt=$ra_opt
                 test $inline != on && inline_opt="$inline_opt --ion-inlining=$inline"
+            for osr in on off; do
+                osr_opt=$inline_opt
+                test $osr != on && osr_opt="$osr_opt --ion-osr=$osr"
 
-            opt=$inline_opt
-            phase="runi ion mode=$mode gvn=$gvn licm=$licm regalloc=$ra inlining=$inline"
+            opt=$osr_opt
+            phase="runi ion mode=$mode gvn=$gvn licm=$licm regalloc=$ra inlining=$inline osr=$osr"
             run $srcdir/_build/$arch/$cc/$bld/js --ion $opt "$@"
 
+            done
             done
             done
             done
