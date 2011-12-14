@@ -150,8 +150,8 @@ let
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
-          export TZ = "US/Pacific"
-          export TZDIR = "${pkgs.glibc}/share/zoneinfo"
+          export TZ="US/Pacific"
+          export TZDIR="${pkgs.glibc}/share/zoneinfo"
           echo ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --jitflags= ${opts} ${optBuild}/bin/js ${jitTestSuite}
           python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --jitflags= ${opts} ${optBuild}/bin/js ${jitTestSuite}
         '';
@@ -179,8 +179,8 @@ let
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
-          export TZ = "US/Pacific"
-          export TZDIR = "${pkgs.glibc}/share/zoneinfo"
+          export TZ="US/Pacific"
+          export TZDIR="${pkgs.glibc}/share/zoneinfo"
           export IONFLAGS="all"
           python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee ./log | grep -v 'TEST\|PASS\|FAIL|\--ion'
           cat  > $out/failures.html <<EOF
