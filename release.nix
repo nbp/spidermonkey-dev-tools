@@ -75,7 +75,7 @@ let
         inherit officialRelease;
       };
 
-    jsBuild =
+    jsBuildNoMJIT =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
       }:
@@ -83,14 +83,16 @@ let
       let pkgs = import nixpkgs { inherit system; }; in
       with pkgs.lib;
       pkgs.releaseTools.nixBuild {
-        name = "ionmonkey";
+        name = "ionmonkey-no-mjit";
         src = tarball;
         postUnpack = ''
           sourceRoot=$sourceRoot/js/src
           echo Compile in $sourceRoot
         '';
         buildInputs = with pkgs; [ perl python ];
-        configureFlags = [ "--enable-debug" "--disable-optimize" ];
+        configureFlags = [ "--enable-debug" "--disable-optimize"
+          "--disable-methodjit"
+        ];
         postInstall = ''
           ./config/nsinstall -t js $out/bin
         '';
@@ -99,43 +101,59 @@ let
         meta = {
           description = "Build JS shell.";
           # Should think about reducing the priority of i686-linux.
-          schedulingPriority =
-            if system != "armv7l-linux" then "100"
-            else "50";
+          schedulingPriority = "100";
         };
       };
 
-    jsBuildNoMJIT =
+    jsOptBuildNoMJIT =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
-      let build = jobs.jsBuild { inherit tarball system; }; in
+      let build = jobs.jsBuildNoMJIT { inherit tarball system; }; in
       with pkgs.lib;
 
       pkgs.lib.overrideDerivation build (attrs: {
-        name = "ionmonkey-no-mjit";
-        configureFlags = attrs.configureFlags ++ [ "--disable-methodjit" ];
+        name = "ionmonkey-opt-no-mjit";
+        configureFlags = [ "--disable-methodjit" ];
       });
 
-    jsCheck =
+    # jsBuildNoMJIT =
+    #   { tarball ? jobs.tarball {}
+    #   , system ? builtins.currentSystem
+    #   }:
+
+    #   let pkgs = import nixpkgs { inherit system; }; in
+    #   let build = jobs.jsBuild { inherit tarball system; }; in
+    #   with pkgs.lib;
+
+    #   pkgs.lib.overrideDerivation build (attrs: {
+    #     name = "ionmonkey-no-mjit";
+    #     configureFlags = attrs.configureFlags ++ [ "--disable-methodjit" ];
+    #   });
+
+    jsSpeedCheckInterp =
       { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuildNoJIT { }
+      , optBuild ? jobs.jsOptBuildNoMJIT { }
       , system ? builtins.currentSystem
-      , jitTestOpt ? ""
+      , jitTestOpt ? "--args=-n"
+      , jitTestSuite ? "sunspider v8"
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
       let opts = jitTestOpt; in
       pkgs.releaseTools.nixBuild {
-        name = "ionmonkey-check";
+        name = "ionmonkey-speed-check";
         src = tarball;
-        buildInputs = with pkgs; [ python ];
+        buildInputs = with pkgs; [ python glibc ];
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f ${opts} ${build}/bin/js
+          export TZ = "US/Pacific"
+          export TZDIR = "${pkgs.glibc}/share/zoneinfo"
+          echo ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --jitflags= ${opts} ${optBuild}/bin/js ${jitTestSuite}
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --jitflags= ${opts} ${optBuild}/bin/js ${jitTestSuite}
         '';
         dontInstall = true;
         dontFixup = true;
@@ -159,10 +177,12 @@ let
         src = tarball;
         buildInputs = with pkgs; [ python ];
         dontBuild = true;
-        IONFLAGS="all";
         checkPhase = ''
           ensureDir $out
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee ./log | grep TEST-
+          export TZ = "US/Pacific"
+          export TZDIR = "${pkgs.glibc}/share/zoneinfo"
+          export IONFLAGS="all"
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee ./log | grep -v 'TEST\|PASS\|FAIL|\--ion'
           cat  > $out/failures.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
@@ -187,5 +207,67 @@ let
       };
   };
 
+  speedTest = mode: gvn: licm: ra: inline:
+    with pkgs.lib;
+    let
+      name = ""
+      + optionalString (mode == "eager") "Eager"
+      + optionalString (mode == "infer") "Infer"
+      + optionalString (mode == "none")  "None_"
+      + "_"
+      + optionalString (gvn == "off")         "GVNn"
+      + optionalString (gvn == "pessimistic") "GVNp"
+      + optionalString (gvn == "optimistic")  "GVNo"
+      + "_"
+      + optionalString (licm == "off") "LICMn"
+      + optionalString (licm == "on")  "LICMy"
+      + "_"
+      + optionalString (ra == "greedy") "RAg"
+      + optionalString (ra == "lsra")   "RAl"
+      + "_"
+      + optionalString (inline == "off") "INLn"
+      + optionalString (inline == "on")  "INLy"
+      ;
+
+      args = "--ion"
+      + optionalString (mode == "eager") " --ion-eager"
+      + optionalString (mode == "infer") " -n"
+      + " --ion-gvn=${gvn}"
+      + " --ion-licm=${licm}"
+      + " --ion-regalloc=${ra}"
+      + " --ion-inlining=${inline}"
+      ;
+    in
+
+    setAttrByPath [ ("jsSpeedCheckIon_" + name) ] (
+      { tarball ? jobs.tarball {}
+      , optBuild ? jobs.jsOptBuildNoMJIT { }
+      , system ? builtins.currentSystem
+      }:
+
+      let
+        pkgs = import nixpkgs { inherit system; };
+        build = jobs.jsSpeedCheckInterp {
+          inherit tarball system;
+          jitTestOpt = "--args='${args}'";
+        };
+      in
+      with pkgs.lib;
+
+      pkgs.lib.overrideDerivation build (attrs: {
+        name = attrs.name + "-" + name;
+      })
+    );
+
+  speedTests = with pkgs.lib;
+    fold (x: y: x // y) {} (
+    flip concatMap [ "eager" "infer" "none" ] (mode:
+    flip concatMap [ "off" "pessimistic" "optimistic" ] (gvn:
+    flip concatMap [ "off" "on" ] (licm:
+    flip concatMap [ "greedy" "lsra" ] (ra:
+    flip map [ "on" "off" ] (inline:
+      speedTest mode gvn licm ra inline
+    ))))));
+
 in
-  jobs
+  jobs // speedTests
