@@ -272,7 +272,7 @@ let
     flip concatMap [ "on" "off" ] (inline:
     flip map [ "on" "off" ] (osr:
       speedTest mode gvn licm ra inline osr
-    ))))));
+    )))))));
 
 in
   jobs // speedTests

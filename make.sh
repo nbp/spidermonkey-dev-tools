@@ -10,7 +10,7 @@ arg=$1; shift;
 oldarg=
 while test "$arg" != "$oldarg"; do
     case ${arg%%-*} in
-        (x86|x64) arch_sel="$arch_sel ${arg%%-*}";;
+        (x86|x64|arm) arch_sel="$arch_sel ${arg%%-*}";;
         (dbg|opt) bld_sel="$bld_sel ${arg%%-*}";;
         (gcc*) cc_sel="$cc_sel ${arg%%-*}";;
         (cfg|make|chk|run|runi|chki|chkt|regen) phase_sel="$phase_sel ${arg%%-*}";;
@@ -23,7 +23,7 @@ while test "$arg" != "$oldarg"; do
     arg=${arg#*-}
 done
 
-test -z "$arch_sel" && arch_sel="x64 x86"
+test -z "$arch_sel" && arch_sel="x64 x86 arm"
 test -z "$bld_sel" && bld_sel="dbg opt"
 test -z "$cc_sel" && cc_sel="gcc45"
 test -z "$phase_sel" && phase_sel="make"
@@ -255,10 +255,13 @@ for cc in $cc_sel; do
 
     builddir=$srcdir/_build/$arch/$cc/$bld
     buildtmpl=$HOME/mozilla/_build_tmpl/$arch/$cc/$bld
+    oldarch=$arch
+    test $arch = arm && arch=x64
     gen_builddir
 
     clean_env
     load_local_env "$builddir"
+    arch=$oldarch
 
     test -e "$builddir" || mkdir -p "$builddir"
     phase_sel_case="$phase_sel"
@@ -288,6 +291,8 @@ for phase in $phase_sel_case; do
             esac
             case $arch in
                 (x86) conf_args="$conf_args i686-unknown-linux-gnu";;
+                (arm) conf_args="$conf_args armv7l-unknown-linux-gnueabi"
+                continue;;
             esac
 
             phase="configure"
@@ -297,7 +302,22 @@ for phase in $phase_sel_case; do
             ;;
 
         (make)
-            LC_ALL=C run make -C $srcdir/_build/$arch/$cc/$bld "$@"
+            case $arch in
+                (arm)
+                    case $bld in
+                        (dbg)
+                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsBuildNoMJIT -o "$builddir/result"
+                            ;;
+                        (opt)
+                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsOptBuildNoMJIT -o "$builddir/result"
+                            ;;
+                    esac
+                    ln -sf "$builddir/result/bin/js" "$builddir/js"
+                    ;;
+                (*)
+                    LC_ALL=C run make -C $srcdir/_build/$arch/$cc/$bld "$@"
+                    ;;
+            esac
             ;;
 
         (chk)
