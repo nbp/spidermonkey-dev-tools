@@ -131,8 +131,7 @@ let
       });
 
     jsSpeedCheckJM =
-      { tarball ? jobs.tarball {}
-      , optBuild ? jobs.jsOptBuild {}
+      { optBuild ? jobs.jsOptBuild {}
       , system ? builtins.currentSystem
       , jitTestOpt ? "-m -n"
       # bencmarks
@@ -145,7 +144,7 @@ let
       let opts = jitTestOpt; in
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-speed-check";
-        src = tarball;
+        src = optBuild;
         buildInputs = with pkgs; [ perl glibc ];
         dontBuild = true;
         checkPhase = ''
@@ -153,25 +152,32 @@ let
           export TZ="US/Pacific"
           export TZDIR="${pkgs.glibc}/share/zoneinfo"
 
+          ensureDir $out/sunspider
+          ensureDir $out/kraken
+
           # run sunspider
-          cd ${sunspider}
+          cp -r ${sunspider} ./sunspider
+          chmod -R u+rw ./sunspider
+          cd ./sunspider
           latest=$(ls -1 ./tests/ | sed -n '/sunspider/ { s,/$,,; p }' | sort -r | head -n 1)
-          perl ./sunspider --shell ${optBuild}/bin/js --args="${jitTestOpt}" --suite=$latest > $out/sunspider.log
+          perl ./sunspider --shell ${optBuild}/bin/js --args="${jitTestOpt}" --suite=$latest | tee $out/sunspider.log
           for f in *-results; do
-              mv $f $out/.
+              cp -r $f $out/sunspider
           done
           cd -
           # run kraken
-          cd ${kraken}
+          cp -r ${kraken} ./kraken
+          chmod -R u+rw ./kraken
+          cd ./kraken
           latest=$(ls -1 ./tests/ | sed -n '/kraken/ { s,/$,,; p }' | sort -r | head -n 1)
-          perl ./sunspider --shell ${optBuild}/bin/js --args="${jitTestOpt}" --suite=$latest > $out/kraken.log
+          perl ./sunspider --shell ${optBuild}/bin/js --args="${jitTestOpt}" --suite=$latest | tee $out/kraken.log
           for f in *-results; do
-              mv $f $out/.
+              cp -r $f $out/kraken
           done
           cd -
           # run v8
           cd ${v8}
-          ${optBuild}/bin/js ${jitTestOpt} ./run.js > $out/v8.log
+          ${optBuild}/bin/js ${jitTestOpt} ./run.js | tee $out/v8.log
           cd -
           sed -n '/====/,/Results/ { p }' $out/sunspider.log $out/kraken.log | cat - $out/v8.log > $out/summary.txt
           echo "report stats $out/summary.txt" > $out/nix-support/hydra-build-products
