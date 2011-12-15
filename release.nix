@@ -75,7 +75,7 @@ let
         inherit officialRelease;
       };
 
-    jsBuildNoMJIT =
+    jsBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
       }:
@@ -83,16 +83,24 @@ let
       let pkgs = import nixpkgs { inherit system; }; in
       with pkgs.lib;
       pkgs.releaseTools.nixBuild {
-        name = "ionmonkey-no-mjit";
+        name = "ionmonkey";
         src = tarball;
         postUnpack = ''
           sourceRoot=$sourceRoot/js/src
           echo Compile in $sourceRoot
         '';
         buildInputs = with pkgs; [ perl python ];
-        configureFlags = [ "--enable-debug" "--disable-optimize"
-          "--disable-methodjit"
-        ];
+        CONFIG_SITE = pkgs.writeText "config.site" ''
+          ${if system == "armv7l-linux" then ''
+            CC="gcc -mcpu=cortex-a9 -mtune=cortex-a9"
+            CXX="g++ -mcpu=cortex-a9 -mtune=cortex-a9"
+          '' else ""
+          }
+        '';
+        configureFlags = [ "--enable-debug" "--disable-optimize" ]
+        ++ optionals (system == "i686-linux") [ "i686-pv-linux-gnu" ]
+        ++ optionals (system == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ]
+        ;
         postInstall = ''
           ./config/nsinstall -t js $out/bin
         '';
@@ -105,40 +113,32 @@ let
         };
       };
 
-    jsOptBuildNoMJIT =
+    jsOptBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
-      let build = jobs.jsBuildNoMJIT { inherit tarball system; }; in
+      let build = jobs.jsBuild { inherit tarball system; }; in
       with pkgs.lib;
 
       pkgs.lib.overrideDerivation build (attrs: {
-        name = "ionmonkey-opt-no-mjit";
-        configureFlags = [ "--disable-methodjit" ];
+        name = "ionmonkey-opt";
+        configureFlags = []
+        ++ optionals (system == "i686-linux") [ "i686-pv-linux-gnu" ]
+        ++ optionals (system == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ]
+        ;
       });
 
-    # jsBuildNoMJIT =
-    #   { tarball ? jobs.tarball {}
-    #   , system ? builtins.currentSystem
-    #   }:
-
-    #   let pkgs = import nixpkgs { inherit system; }; in
-    #   let build = jobs.jsBuild { inherit tarball system; }; in
-    #   with pkgs.lib;
-
-    #   pkgs.lib.overrideDerivation build (attrs: {
-    #     name = "ionmonkey-no-mjit";
-    #     configureFlags = attrs.configureFlags ++ [ "--disable-methodjit" ];
-    #   });
-
-    jsSpeedCheckInterp =
+    jsSpeedCheckJM =
       { tarball ? jobs.tarball {}
-      , optBuild ? jobs.jsOptBuildNoMJIT { }
+      , optBuild ? jobs.jsOptBuild {}
       , system ? builtins.currentSystem
-      , jitTestOpt ? "--args=-n"
-      , jitTestSuite ? "sunspider v8"
+      , jitTestOpt ? "-m -n"
+      # bencmarks
+      , sunspider ? { outPath = /home/nicolas/mozilla/sunspider-benchmark; }
+      , v8 ? { outPath = /home/nicolas/mozilla/v8-benchmark; }
+      , kraken ? { outPath = /home/nicolas/mozilla/kraken; }
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
@@ -146,14 +146,35 @@ let
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-speed-check";
         src = tarball;
-        buildInputs = with pkgs; [ python glibc ];
+        buildInputs = with pkgs; [ perl glibc ];
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
           export TZ="US/Pacific"
           export TZDIR="${pkgs.glibc}/share/zoneinfo"
-          echo ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --jitflags= ${opts} ${optBuild}/bin/js ${jitTestSuite}
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --jitflags= ${opts} ${optBuild}/bin/js ${jitTestSuite}
+
+          # run sunspider
+          cd ${sunspider}
+          latest=$(ls -1 ./tests/ | sed -n '/sunspider/ { s,/$,,; p }' | sort -r | head -n 1)
+          perl ./sunspider --shell ${optBuild}/bin/js --args="${jitTestOpt}" --suite=$latest > $out/sunspider.log
+          for f in *-results; do
+              mv $f $out/.
+          done
+          cd -
+          # run kraken
+          cd ${kraken}
+          latest=$(ls -1 ./tests/ | sed -n '/kraken/ { s,/$,,; p }' | sort -r | head -n 1)
+          perl ./sunspider --shell ${optBuild}/bin/js --args="${jitTestOpt}" --suite=$latest > $out/kraken.log
+          for f in *-results; do
+              mv $f $out/.
+          done
+          cd -
+          # run v8
+          cd ${v8}
+          ${optBuild}/bin/js ${jitTestOpt} ./run.js > $out/v8.log
+          cd -
+          sed -n '/====/,/Results/ { p }' $out/sunspider.log $out/kraken.log | cat - $out/v8.log > $out/summary.txt
+          echo "report stats $out/summary.txt" > $out/nix-support/hydra-build-products
         '';
         dontInstall = true;
         dontFixup = true;
@@ -166,7 +187,7 @@ let
 
     jsIonStats =
       { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuildNoMJIT { }
+      , build ? jobs.jsBuild {}
       , system ? builtins.currentSystem
       }:
 
@@ -179,23 +200,24 @@ let
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
-          export TZ="US/Pacific"
-          export TZDIR="${pkgs.glibc}/share/zoneinfo"
-          export IONFLAGS="all"
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee ./log | grep -v 'TEST\|PASS\|FAIL|\--ion'
-          cat  > $out/failures.html <<EOF
+          TZ="US/Pacific" \
+          TZDIR="${pkgs.glibc}/share/zoneinfo" \
+          IONFLAGS=all \
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep -v 'TEST\|PASS\|FAIL|\--ion'
+          cat  > $out/stats.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
-          <p>Number of compilation failures : $(grep -c "\[Abort\] IM Compilation failed." ./log)</p>
+          <p>Number of compilation failures : $(grep -c "\[Abort\] IM Compilation failed." $out/log)</p>
           <p>Unsupported opcode (sorted):
           <ol>
-          $(sed -n "/Unsupported opcode/ { s,(line .*),,; p }" ./log | sort | uniq -c | sort -nr | sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,')
+          $(sed -n "/Unsupported opcode/ { s,(line .*),,; p }" $out/log | sort | uniq -c | sort -nr | sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,')
           </ol></p>
-          <p>Number of GVN congruence : $(grep -c "\[GVN\] marked"  ./log)</p>
-          <p>Number of snapshots : $(grep -c "\[Snapshots\] Assigning snapshot" ./log)</p>
-          <p>Number of bailouts : $(grep -c "\[Bailouts\] Bailing out" ./log)</p>
+          <p>Number of GVN congruence : $(grep -c "\[GVN\] marked"  $out/log)</p>
+          <p>Number of snapshots : $(grep -c "\[Snapshots\] Assigning snapshot" $out/log)</p>
+          <p>Number of bailouts : $(grep -c "\[Bailouts\] Bailing out" $out/log)</p>
           </body>
           EOF
+          echo "report stats $out/stats.html" > $out/nix-support/hydra-build-products
         '';
         dontInstall = true;
         dontFixup = true;
@@ -251,9 +273,9 @@ let
 
       let
         pkgs = import nixpkgs { inherit system; };
-        build = jobs.jsSpeedCheckInterp {
+        build = jobs.jsSpeedCheckJM {
           inherit tarball system;
-          jitTestOpt = "--args='${args}'";
+          jitTestOpt = args;
         };
       in
       with pkgs.lib;

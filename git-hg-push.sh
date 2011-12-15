@@ -23,5 +23,7 @@ for ref in "$@"; do
 
         # Export the bookmarks update to git.
         hg gexport
+    else
+        echo "Error during push: exit $?"
     fi
 done
