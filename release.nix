@@ -136,9 +136,9 @@ let
       , system ? builtins.currentSystem
       , jitTestOpt ? "-m -n"
       # bencmarks
-      , sunspider ? { outPath = /home/nicolas/mozilla/sunspider-benchmark; }
-      , v8 ? { outPath = /home/nicolas/mozilla/v8-benchmark; }
-      , kraken ? { outPath = /home/nicolas/mozilla/kraken; }
+      , sunspider ? { outPath = <sunspider>; }
+      , v8 ? { outPath = <v8>; }
+      , kraken ? { outPath = <kraken>; }
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
