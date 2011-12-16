@@ -31,7 +31,7 @@ let
 
   jobs = rec {
     tarball =
-      { ionmonkeySrc ? { outPath = <ionmonkey>; }
+      { ionmonkeySrc # ? { outPath = <ionmonkey>; }
       }:
 
       pkgs.releaseTools.sourceTarball {
@@ -133,11 +133,11 @@ let
     jsSpeedCheckJM =
       { optBuild ? jobs.jsOptBuild {}
       , system ? builtins.currentSystem
-      , jitTestOpt ? "-m -n"
+      , jitTestOpt ? " -m -n "
       # bencmarks
-      , sunspider ? { outPath = <sunspider>; }
-      , v8 ? { outPath = <v8>; }
-      , kraken ? { outPath = <kraken>; }
+      , sunspider # ? { outPath = <sunspider>; }
+      , v8 # ? { outPath = <v8>; }
+      , kraken # ? { outPath = <kraken>; }
       }:
 
       let pkgs = import nixpkgs { inherit system; }; in
@@ -274,12 +274,13 @@ let
     setAttrByPath [ ("jsSpeedCheckIon_" + name) ] (
       { optBuild ? jobs.jsOptBuild {}
       , system ? builtins.currentSystem
+      , sunspider, v8, kraken
       }:
 
       let
         pkgs = import nixpkgs { inherit system; };
         build = jobs.jsSpeedCheckJM {
-          inherit optBuild system;
+          inherit optBuild system sunspider v8 kraken;
           jitTestOpt = args;
         };
       in
