@@ -209,7 +209,7 @@ let
           TZ="US/Pacific" \
           TZDIR="${pkgs.glibc}/share/zoneinfo" \
           IONFLAGS=all \
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep -v 'TEST\|PASS\|FAIL|\--ion'
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep 'TEST\|PASS\|FAIL|\--ion'
           cat  > $out/stats.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
