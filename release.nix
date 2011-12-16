@@ -291,16 +291,32 @@ let
       })
     );
 
+  hasOnlyOneVariation = switches: with pkgs.lib;
+    builtins.lessThan
+      (length (filter (switch: !switch.default) switches))
+      2;
+
+  # First value of the list of option is the default value.
+  switchOver = defaults: rest: f:  with pkgs.lib;
+    let switches =
+         map (v: {value = v; default = true;}) defaults
+      ++ map (v: {value = v; default = false;}) rest;
+    in
+      flip concatMap switches f;
+
   speedTests = with pkgs.lib;
     fold (x: y: x // y) {} (
-    flip concatMap [ "eager" "infer" "none" ] (mode:
-    flip concatMap [ "off" "pessimistic" "optimistic" ] (gvn:
-    flip concatMap [ "off" "on" ] (licm:
-    flip concatMap [ "greedy" "lsra" ] (ra:
-    flip concatMap [ "on" "off" ] (inline:
-    flip map [ "on" "off" ] (osr:
-      speedTest mode gvn licm ra inline osr
-    )))))));
+      switchOver ["infer"] ["eager" "none"] (mode:
+      switchOver [ "optimistic" ] [ "off" "pessimistic" ] (gvn:
+      switchOver [ "on" ] [ "off"] (licm:
+      switchOver [ "lsra" ] [ "greedy" ] (ra:
+      switchOver [ "on" ] [ "off"] (inline:
+      switchOver [ "on" ] [ "off"] (osr:
+        optional (hasOnlyOneVariation [mode gvn licm ra inline osr]) (
+          speedTest mode.value gvn.value licm.value ra.value inline.value osr.value
+        )
+      ))))))
+   );
 
 in
   jobs // speedTests
