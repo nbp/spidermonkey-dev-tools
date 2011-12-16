@@ -272,15 +272,14 @@ let
     in
 
     setAttrByPath [ ("jsSpeedCheckIon_" + name) ] (
-      { tarball # ? jobs.tarball {}
-      , optBuild # ? jobs.jsOptBuildNoMJIT { }
-      , system # ? builtins.currentSystem
+      { optBuild ? jobs.jsOptBuild {}
+      , system ? builtins.currentSystem
       }:
 
       let
         pkgs = import nixpkgs { inherit system; };
         build = jobs.jsSpeedCheckJM {
-          inherit tarball system;
+          inherit optBuild system;
           jitTestOpt = args;
         };
       in
