@@ -13,6 +13,10 @@ for ref in "$@"; do
     force=
     test "$repo" = try && force=-f
 
+    # we need to push the revision number instead of the bookmarks, otherwise it
+    # is shared on the repository and everybody will get it.
+    rev=$(hg bookmarks | sed -n '\, '$bookmark' , { s,.*:,,; p }')
+
     # Push to the repository named as first member of the branch.
     if hg push $force -B $bookmark $repo; then
         test "$repo" = try && continue
@@ -24,6 +28,8 @@ for ref in "$@"; do
         # Export the bookmarks update to git.
         hg gexport
     else
-        echo "Error during push: exit $?"
+        error=$?
+        echo "Error during push: exit $error"
+        exit $error
     fi
 done
