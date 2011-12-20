@@ -234,6 +234,9 @@ let
 
           #echo "report build-log $out/log" >> $out/nix-support/hydra-build-products
           rm $out/log
+
+          # Cause failures if the fail-log is not empty.
+          test -z "$(head -n 1 $out/failures.txt)"
         '';
         dontInstall = true;
         dontFixup = true;
