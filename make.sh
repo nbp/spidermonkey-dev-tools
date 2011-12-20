@@ -23,7 +23,7 @@ while test "$arg" != "$oldarg"; do
     arg=${arg#*-}
 done
 
-test -z "$arch_sel" && arch_sel="x64 x86 arm"
+test -z "$arch_sel" && arch_sel="x64 x86"
 test -z "$bld_sel" && bld_sel="dbg opt"
 test -z "$cc_sel" && cc_sel="gcc45"
 test -z "$phase_sel" && phase_sel="make"
@@ -306,10 +306,10 @@ for phase in $phase_sel_case; do
                 (arm)
                     case $bld in
                         (dbg)
-                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsBuildNoMJIT -o "$builddir/result"
+                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsBuild -o "$builddir/result"
                             ;;
                         (opt)
-                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsOptBuildNoMJIT -o "$builddir/result"
+                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsOptBuild -o "$builddir/result"
                             ;;
                     esac
                     ln -sf "$builddir/result/bin/js" "$builddir/js"
