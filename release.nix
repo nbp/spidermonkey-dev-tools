@@ -209,8 +209,14 @@ let
           TZ="US/Pacific" \
           TZDIR="${pkgs.glibc}/share/zoneinfo" \
           IONFLAGS=all \
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep 'TEST\|PASS\|FAIL|\--ion'
-          cat  > $out/stats.html <<EOF
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
+
+          # List of all failing test with the debug output.
+          sed -n ':beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { p; d }; N; b beg;' $out/log > $out/failures.txt
+          echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
+
+          # Collect stats about the current run.
+          cat - > $out/stats.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
           <p>Number of compilation failures : $(grep -c "\[Abort\] IM Compilation failed." $out/log)</p>
@@ -221,12 +227,17 @@ let
           <p>Number of GVN congruence : $(grep -c "\[GVN\] marked"  $out/log)</p>
           <p>Number of snapshots : $(grep -c "\[Snapshots\] Assigning snapshot" $out/log)</p>
           <p>Number of bailouts : $(grep -c "\[Bailouts\] Bailing out" $out/log)</p>
+          <p>Number of tests : PASS: $(grep -c "^TEST-PASS" $out/log), FAIL: $(grep -c "^TEST-UNEXPECTED" $out/log)</p>
           </body>
           EOF
-          echo "report stats $out/stats.html" > $out/nix-support/hydra-build-products
+          echo "report stats $out/stats.html" >> $out/nix-support/hydra-build-products
+
+          #echo "report build-log $out/log" >> $out/nix-support/hydra-build-products
+          rm $out/log
         '';
         dontInstall = true;
         dontFixup = true;
+        succeedOnFailure = true;
 
         meta = {
           description = "Run test suites to collect compilation stats.";
