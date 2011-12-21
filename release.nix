@@ -212,30 +212,47 @@ let
           python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
 
           # List of all failing test with the debug output.
+          echo Report failures.
           sed -n ':beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { p; d }; N; b beg;' $out/log > $out/failures.txt
           echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
 
           # Collect stats about the current run.
+          echo Generate Stats.
+          comp_failures=$(grep -c "\[Abort\] IM Compilation failed." $out/log)
+          echo 1
+          gvn=$(grep -c "\[GVN\] marked"  $out/log)
+          echo 2
+          snapshots=$(grep -c "\[Snapshots\] Assigning snapshot" $out/log)
+          echo 3
+          bailouts=$(grep -c "\[Bailouts\] Bailing out" $out/log)
+          echo 4
+          pass=$(grep -c "^TEST-PASS" $out/log)
+          echo 5
+          fail=$(grep -c "^TEST-UNEXPECTED" $out/log)
+          echo 6
           cat - > $out/stats.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
-          <p>Number of compilation failures : $(grep -c "\[Abort\] IM Compilation failed." $out/log)</p>
+          <p>Number of compilation failures : $comp_failures</p>
           <p>Unsupported opcode (sorted):
           <ol>
           $(sed -n "/Unsupported opcode/ { s,(line .*),,; p }" $out/log | sort | uniq -c | sort -nr | sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,')
           </ol></p>
-          <p>Number of GVN congruence : $(grep -c "\[GVN\] marked"  $out/log)</p>
-          <p>Number of snapshots : $(grep -c "\[Snapshots\] Assigning snapshot" $out/log)</p>
-          <p>Number of bailouts : $(grep -c "\[Bailouts\] Bailing out" $out/log)</p>
-          <p>Number of tests : PASS: $(grep -c "^TEST-PASS" $out/log), FAIL: $(grep -c "^TEST-UNEXPECTED" $out/log)</p>
+          <p>Number of GVN congruence : $gvn</p>
+          <p>Number of snapshots : $snapshots</p>
+          <p>Number of bailouts : $bailouts</p>
+          <p>Number of tests : PASS: $pass, FAIL: $fail</p>
           </body>
           EOF
           echo "report stats $out/stats.html" >> $out/nix-support/hydra-build-products
+          echo done
 
           #echo "report build-log $out/log" >> $out/nix-support/hydra-build-products
+          echo Remove log file.
           rm $out/log
 
           # Cause failures if the fail-log is not empty.
+          echo Check for failures.
           test -z "$(head -n 1 $out/failures.txt)"
         '';
         dontInstall = true;
