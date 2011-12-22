@@ -31,7 +31,7 @@ let
 
   jobs = rec {
     tarball =
-      { ionmonkeySrc # ? { outPath = <ionmonkey>; }
+      { ionmonkeySrc ? { outPath = <ionmonkey>; }
       }:
 
       pkgs.releaseTools.sourceTarball {
@@ -202,57 +202,54 @@ let
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-check";
         src = tarball;
-        buildInputs = with pkgs; [ python ];
+        buildInputs = with pkgs; [ python gnused ];
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
           TZ="US/Pacific" \
           TZDIR="${pkgs.glibc}/share/zoneinfo" \
           IONFLAGS=all \
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
 
           # Collect stats about the current run.
           echo -n Generate Stats
-          comp_failures=$(grep -c "\[Abort\] IM Compilation failed." $out/log)
+          comp_failures=$(grep -c "\[Abort\] IM Compilation failed." ./log || true)
           echo -n .
-          gvn=$(grep -c "\[GVN\] marked"  $out/log)
+          gvn=$(grep -c "\[GVN\] marked"  ./log || true)
           echo -n .
-          snapshots=$(grep -c "\[Snapshots\] Assigning snapshot" $out/log)
+          snapshots=$(grep -c "\[Snapshots\] Assigning snapshot" ./log || true)
           echo -n .
-          bailouts=$(grep -c "\[Bailouts\] Bailing out" $out/log)
+          bailouts=$(grep -c "\[Bailouts\] Bailing out" ./log || true)
           echo -n .
-          pass=$(grep -c "^TEST-PASS" $out/log)
+          pass=$(grep -c "^TEST-PASS" ./log || true)
           echo -n .
-          fail=$(grep -c "^TEST-UNEXPECTED" $out/log)
+          fail=$(grep -c "^TEST-UNEXPECTED" ./log || true)
           echo -n .
-          cat - > $out/stats.html <<EOF
+          sed -n "/Unsupported opcode/ { s,(line .*),,; p }" ./log | sort | uniq -c | sort -nr > ./unsupported.log
+          echo -n .
+
+          echo > $out/stats.html "
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
           <p>Number of compilation failures : $comp_failures</p>
           <p>Unsupported opcode (sorted):
-          <ol>
-          $(sed -n "/Unsupported opcode/ { s,(line .*),,; p }" $out/log | sort | uniq -c | sort -nr | sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,')
-          </ol></p>
+          <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./unsupported.log)</ol></p>
           <p>Number of GVN congruence : $gvn</p>
           <p>Number of snapshots : $snapshots</p>
           <p>Number of bailouts : $bailouts</p>
           <p>Number of tests : PASS: $pass, FAIL: $fail</p>
           </body>
-          EOF
+          "
+
+          echo -n .
           echo "report stats $out/stats.html" >> $out/nix-support/hydra-build-products
-          echo
+          echo .
 
           # List of all failing test with the debug output.
-          if false; then
-              echo Report failures.
-              sed -n ':beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' $out/log > $out/failures.txt
-              echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
-          fi
-
-
-          #echo "report build-log $out/log" >> $out/nix-support/hydra-build-products
-          echo Remove log file.
-          rm $out/log
+          echo -n Report failures
+          sed -n ':beg; /TEST-PASS/ { p; d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' ./log > $out/failures.txt
+          echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
+          echo .
 
           # Cause failures if the fail-log is not empty.
           test $fail -eq 0

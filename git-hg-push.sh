@@ -3,6 +3,15 @@
 # This script is made to be used as a post-update hook of the git clone produced
 # by hg-git.
 
+error=0
+
+# Remove current bookmarks.
+for ref in "$@"; do
+    bookmark=${ref#refs/heads/}
+    repo=${bookmark%%/*}
+    hg bookmark -d $bookmark
+done
+
 # Import changes into mercurial.
 hg gimport
 
@@ -13,12 +22,8 @@ for ref in "$@"; do
     force=
     test "$repo" = try && force=-f
 
-    # we need to push the revision number instead of the bookmarks, otherwise it
-    # is shared on the repository and everybody will get it.
-    rev=$(hg bookmarks | sed -n '\, '$bookmark' , { s,.*:,,; p }')
-
     # Push to the repository named as first member of the branch.
-    if hg push $force -B $bookmark $repo; then
+    if hg push $force -r $bookmark $repo; then
         test "$repo" = try && continue
 
         # Update the bookmark of the main branch of the repository where we pushed.
@@ -30,6 +35,7 @@ for ref in "$@"; do
     else
         error=$?
         echo "Error during push: exit $error"
-        exit $error
     fi
 done
+
+exit $error
