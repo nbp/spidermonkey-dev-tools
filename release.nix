@@ -211,25 +211,20 @@ let
           IONFLAGS=all \
           python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow ${build}/bin/js ion 2>&1 | tee $out/log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
 
-          # List of all failing test with the debug output.
-          echo Report failures.
-          sed -n ':beg; /TEST-PASS/ { p; d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' $out/log | tee /dev/stderr | grep -v '^TEST-PASS' > $out/failures.txt
-          echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
-
           # Collect stats about the current run.
-          echo Generate Stats.
+          echo -n Generate Stats
           comp_failures=$(grep -c "\[Abort\] IM Compilation failed." $out/log)
-          echo 1
+          echo -n .
           gvn=$(grep -c "\[GVN\] marked"  $out/log)
-          echo 2
+          echo -n .
           snapshots=$(grep -c "\[Snapshots\] Assigning snapshot" $out/log)
-          echo 3
+          echo -n .
           bailouts=$(grep -c "\[Bailouts\] Bailing out" $out/log)
-          echo 4
+          echo -n .
           pass=$(grep -c "^TEST-PASS" $out/log)
-          echo 5
+          echo -n .
           fail=$(grep -c "^TEST-UNEXPECTED" $out/log)
-          echo 6
+          echo -n .
           cat - > $out/stats.html <<EOF
           <head><title>Compilation stats of IonMonkey</title></head>
           <body>
@@ -245,15 +240,22 @@ let
           </body>
           EOF
           echo "report stats $out/stats.html" >> $out/nix-support/hydra-build-products
-          echo done
+          echo
+
+          # List of all failing test with the debug output.
+          if false; then
+              echo Report failures.
+              sed -n ':beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' $out/log > $out/failures.txt
+              echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
+          fi
+
 
           #echo "report build-log $out/log" >> $out/nix-support/hydra-build-products
           echo Remove log file.
           rm $out/log
 
           # Cause failures if the fail-log is not empty.
-          echo Check for failures.
-          test -z "$(head -n 1 $out/failures.txt)"
+          test $fail -gt 0
         '';
         dontInstall = true;
         dontFixup = true;
