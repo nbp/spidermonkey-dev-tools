@@ -255,7 +255,7 @@ let
           rm $out/log
 
           # Cause failures if the fail-log is not empty.
-          test $fail -gt 0
+          test $fail -eq 0
         '';
         dontInstall = true;
         dontFixup = true;
