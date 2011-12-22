@@ -213,7 +213,7 @@ let
 
           # List of all failing test with the debug output.
           echo Report failures.
-          sed -n ':beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { p; d }; N; b beg;' $out/log > $out/failures.txt
+          sed -n ':beg; /TEST-PASS/ { p; d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' $out/log | tee /dev/stderr | grep -v '^TEST-PASS' > $out/failures.txt
           echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
 
           # Collect stats about the current run.
