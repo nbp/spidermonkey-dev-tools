@@ -78,7 +78,10 @@ let
     jsBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
+      , doBuild ? true
       }:
+
+      assert doBuild;
 
       let pkgs = import nixpkgs { inherit system; }; in
       with pkgs.lib;
@@ -116,7 +119,10 @@ let
     jsOptBuild =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
+      , doOptBuild ? true
       }:
+
+      assert doOptBuild;
 
       let pkgs = import nixpkgs { inherit system; }; in
       let build = jobs.jsBuild { inherit tarball system; }; in
@@ -138,7 +144,10 @@ let
       , sunspider # ? { outPath = <sunspider>; }
       , v8 # ? { outPath = <v8>; }
       , kraken # ? { outPath = <kraken>; }
+      , doSpeedCheck ? true
       }:
+
+      assert doSpeedCheck;
 
       let pkgs = import nixpkgs { inherit system; }; in
       let opts = jitTestOpt; in
@@ -187,15 +196,41 @@ let
 
         meta = {
           description = "Run test suites.";
-          schedulingPriority = "10";
+          schedulingPriority = "50";
         };
       };
+
+    jsSpeedCheckIon =
+      { optBuild ? jobs.jsOptBuild {}
+      , system ? builtins.currentSystem
+      # bencmarks
+      , sunspider, v8, kraken
+      , doSpeedCheck ? true
+      }:
+
+      assert doSpeedCheck;
+
+      let
+        pkgs = import nixpkgs { inherit system; };
+        build = jobs.jsSpeedCheckJM {
+          inherit optBuild system sunspider v8 kraken;
+          jitTestOpt = "--ion -n";
+        };
+      in
+      with pkgs.lib;
+
+      pkgs.lib.overrideDerivation build (attrs: {
+        name = attrs.name + "-ion";
+      });
 
     jsIonStats =
       { tarball ? jobs.tarball {}
       , build ? jobs.jsBuild {}
       , system ? builtins.currentSystem
+      , doStats ? true
       }:
+
+      assert doStats;
 
       let pkgs = import nixpkgs { inherit system; }; in
 
@@ -260,7 +295,6 @@ let
 
         meta = {
           description = "Run test suites to collect compilation stats.";
-          schedulingPriority = "50";
         };
       };
   };
@@ -349,4 +383,4 @@ let
    );
 
 in
-  jobs // speedTests
+  jobs /* // speedTests */
