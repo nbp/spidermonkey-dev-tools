@@ -246,6 +246,12 @@ let
           IONFLAGS=all \
           python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow --timeout=10 ${build}/bin/js ion 2>&1 | tee ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
 
+          # List of all failing test with the debug output.
+          echo -n Report failures
+          sed -n 'x; s,.*,,; x; :beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' ./log > $out/failures.txt
+          echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
+          echo .
+
           # Collect stats about the current run.
           echo -n Generate Stats
           comp_failures=$(grep -c "\[Abort\] IM Compilation failed." ./log || true)
@@ -262,6 +268,7 @@ let
           echo -n .
           sed -n "/Unsupported opcode/ { s,(line .*),,; p }" ./log | sort | uniq -c | sort -nr > ./unsupported.log
           echo -n .
+          sed -n '/TEST/ d; /Assertion/ { s,/[^ ]*nix-build[^/]*/,,g; p };' $out/failures.txt | sort | uniq -c | sort -nr > ./assertions.log
 
           echo > $out/stats.html "
           <head><title>Compilation stats of IonMonkey</title></head>
@@ -269,6 +276,8 @@ let
           <p>Number of compilation failures : $comp_failures</p>
           <p>Unsupported opcode (sorted):
           <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./unsupported.log)</ol></p>
+          <p>Failing assertions:
+          <ol>$(sed 's,[^0-9]*\([0-9]\+\) \(.*\),<li value=\1>\2,' ./assertions.log)</ol></p>
           <p>Number of GVN congruence : $gvn</p>
           <p>Number of snapshots : $snapshots</p>
           <p>Number of bailouts : $bailouts</p>
@@ -278,12 +287,6 @@ let
 
           echo -n .
           echo "report stats $out/stats.html" >> $out/nix-support/hydra-build-products
-          echo .
-
-          # List of all failing test with the debug output.
-          echo -n Report failures
-          sed -n 'x; s,.*,,; x; :beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' ./log > $out/failures.txt
-          echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
           echo .
 
           # Cause failures if the fail-log is not empty.
