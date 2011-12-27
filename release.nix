@@ -85,7 +85,7 @@ let
 
       let pkgs = import nixpkgs { inherit system; }; in
       with pkgs.lib;
-      pkgs.releaseTools.nixBuild {
+      (pkgs.releaseTools.nixBuild {
         name = "ionmonkey";
         src = tarball;
         postUnpack = ''
@@ -114,6 +114,8 @@ let
           # Should think about reducing the priority of i686-linux.
           schedulingPriority = "100";
         };
+      }) // {
+        inherit tarball;
       };
 
     jsOptBuild =
@@ -224,8 +226,7 @@ let
       });
 
     jsIonStats =
-      { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuild {}
+      { build ? jobs.jsBuild {}
       , system ? builtins.currentSystem
       , doStats ? true
       }:
@@ -236,7 +237,7 @@ let
 
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-check";
-        src = tarball;
+        src = build.tarball;
         buildInputs = with pkgs; [ python gnused ];
         dontBuild = true;
         checkPhase = ''
