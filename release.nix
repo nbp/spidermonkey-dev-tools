@@ -5,30 +5,6 @@
 let
   pkgs = import nixpkgs {};
 
-  defaultJsBuild =
-    { tarball ? jobs.tarball {}
-    , system ? builtins.currentSystem
-    , override ? {}
-    }:
-
-    let pkgs = import nixpkgs { inherit system; }; in
-    with pkgs.lib;
-    pkgs.releaseTools.nixBuild ({
-      src = tarball;
-      postUnpack = ''
-        sourceRoot=$sourceRoot/js/src
-        echo Compile in $sourceRoot
-      '';
-      buildInputs = with pkgs; [ perl python ];
-      configureFlags = [ "--enable-debug" "--disable-optimize" ];
-      postInstall = ''
-        ./config/nsinstall -t js $out/bin
-      '';
-      doCheck = false;
-    } // override);
-
-
-
   jobs = rec {
     tarball =
       { ionmonkeySrc ? { outPath = <ionmonkey>; }
@@ -100,7 +76,7 @@ let
           '' else ""
           }
         '';
-        configureFlags = [ "--enable-debug" "--disable-optimize" ]
+        configureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ]
         ++ optionals (system == "i686-linux") [ "i686-pv-linux-gnu" ]
         ++ optionals (system == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ]
         ;
@@ -226,7 +202,8 @@ let
       });
 
     jsIonStats =
-      { build ? jobs.jsBuild {}
+      { tarball ? jobs.tarball {}
+      , build ? jobs.jsBuild {}
       , system ? builtins.currentSystem
       , doStats ? true
       }:
@@ -237,7 +214,7 @@ let
 
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-check";
-        src = build.tarball;
+        src = tarball;
         buildInputs = with pkgs; [ python gnused ];
         dontBuild = true;
         checkPhase = ''
