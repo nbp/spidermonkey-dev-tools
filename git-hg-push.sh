@@ -9,10 +9,11 @@ error=0
 for ref in "$@"; do
     bookmark=${ref#refs/heads/}
     repo=${bookmark%%/*}
-    hg bookmark -d $bookmark
+    hg bookmark -d $bookmark || true
 done
 
 # Import changes into mercurial.
+echo "Import changes into mercurial."
 hg gimport
 
 for ref in "$@"; do

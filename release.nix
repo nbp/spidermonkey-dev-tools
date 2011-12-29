@@ -84,6 +84,7 @@ let
           ./config/nsinstall -t js $out/bin
         '';
         doCheck = false;
+        dontStrip = true;
 
         meta = {
           description = "Build JS shell.";
@@ -203,13 +204,13 @@ let
 
     jsIonStats =
       { tarball ? jobs.tarball {}
-      , build ? jobs.jsBuild {}
       , system ? builtins.currentSystem
       , doStats ? true
       }:
 
       assert doStats;
 
+      let build = jobs.jsBuild { inherit tarball system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
 
       pkgs.releaseTools.nixBuild {
@@ -266,6 +267,11 @@ let
           echo -n .
           echo "report stats $out/stats.html" >> $out/nix-support/hydra-build-products
           echo .
+
+          # Link binaries of the previous build to be sure of the one used by
+          # the test suite.
+          echo "$system" > $out/nix-support/system
+          echo "nix-build none ${build}" >> $out/nix-support/hydra-build-products
 
           # Cause failures if the fail-log is not empty.
           test $fail -eq 0
