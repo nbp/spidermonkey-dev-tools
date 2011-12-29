@@ -205,11 +205,12 @@ let
     jsIonStats =
       { tarball ? jobs.tarball {}
       , system ? builtins.currentSystem
-      , build ? jobs.jsBuild { inherit tarball system; };
+      , build ? jobs.jsBuild { inherit tarball system; }
       , doStats ? true
       }:
 
       assert doStats;
+      assert build.outPath == (jobs.jsBuild { inherit tarball system; }).outPath;
 
       let pkgs = import nixpkgs { inherit system; }; in
 
