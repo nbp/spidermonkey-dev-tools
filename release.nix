@@ -272,6 +272,7 @@ let
 
         meta = {
           description = "Run test suites to collect compilation stats.";
+          schedulingPriority = "90";
         };
       };
   };
