@@ -1,15 +1,14 @@
 { nixpkgs ? <nixpkgs>
 , officialRelease ? false
+, ionmonkeySrc ? { outPath = <ionmonkey>; }
 }:
 
 let
   pkgs = import nixpkgs {};
 
   jobs = rec {
-    tarball =
-      { ionmonkeySrc ? { outPath = <ionmonkey>; }
-      }:
 
+    tarball =
       pkgs.releaseTools.sourceTarball {
         name = "ionmonkey-tarball";
         src = ionmonkeySrc;
@@ -52,8 +51,7 @@ let
       };
 
     jsBuild =
-      { tarball ? jobs.tarball {}
-      , system ? builtins.currentSystem
+      { system ? builtins.currentSystem
       , doBuild ? true
       }:
 
@@ -96,15 +94,14 @@ let
       };
 
     jsOptBuild =
-      { tarball ? jobs.tarball {}
-      , system ? builtins.currentSystem
+      { system ? builtins.currentSystem
       , doOptBuild ? true
       }:
 
       assert doOptBuild;
 
       let pkgs = import nixpkgs { inherit system; }; in
-      let build = jobs.jsBuild { inherit tarball system; }; in
+      let build = jobs.jsBuild { inherit system; }; in
       with pkgs.lib;
 
       pkgs.lib.overrideDerivation build (attrs: {
@@ -116,8 +113,7 @@ let
       });
 
     jsSpeedCheckJM =
-      { optBuild ? jobs.jsOptBuild {}
-      , system ? builtins.currentSystem
+      { system ? builtins.currentSystem
       , jitTestOpt ? " -m -n "
       # bencmarks
       , sunspider # ? { outPath = <sunspider>; }
@@ -128,6 +124,7 @@ let
 
       assert doSpeedCheck;
 
+      let build = jsOptBuild { inherit system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
       let opts = jitTestOpt; in
       pkgs.releaseTools.nixBuild {
@@ -180,8 +177,7 @@ let
       };
 
     jsSpeedCheckIon =
-      { optBuild ? jobs.jsOptBuild {}
-      , system ? builtins.currentSystem
+      { system ? builtins.currentSystem
       # bencmarks
       , sunspider, v8, kraken
       , doSpeedCheck ? true
@@ -192,7 +188,7 @@ let
       let
         pkgs = import nixpkgs { inherit system; };
         build = jobs.jsSpeedCheckJM {
-          inherit optBuild system sunspider v8 kraken;
+          inherit system sunspider v8 kraken;
           jitTestOpt = "--ion -n";
         };
       in
@@ -203,14 +199,13 @@ let
       });
 
     jsIonStats =
-      { tarball ? jobs.tarball {}
-      , system ? builtins.currentSystem
-      , build ? jobs.jsBuild { inherit tarball system; }
+      { system ? builtins.currentSystem
       , doStats ? true
       }:
 
       assert doStats;
 
+      let build = jobs.jsBuild { inherit system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
 
       pkgs.releaseTools.nixBuild {
@@ -318,15 +313,14 @@ let
     in
 
     setAttrByPath [ ("jsSpeedCheckIon_" + name) ] (
-      { optBuild ? jobs.jsOptBuild {}
-      , system ? builtins.currentSystem
+      { system ? builtins.currentSystem
       , sunspider, v8, kraken
       }:
 
       let
         pkgs = import nixpkgs { inherit system; };
         build = jobs.jsSpeedCheckJM {
-          inherit optBuild system sunspider v8 kraken;
+          inherit system sunspider v8 kraken;
           jitTestOpt = args;
         };
       in
