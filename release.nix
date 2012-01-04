@@ -245,8 +245,9 @@ let
           sed -n '/TEST/ d; /Assertion/ { s,/[^ ]*nix-build[^/]*/,,g; p };' $out/failures.txt | sort | uniq -c | sort -nr > ./assertions.log
 
           echo > $out/stats.html "
-          <head><title>Compilation stats of IonMonkey</title></head>
+          <head><title>Compilation stats of IonMonkey on ${system}</title></head>
           <body>
+          <p>Running system : ${system}</p>
           <p>Number of compilation failures : $comp_failures</p>
           <p>Unsupported opcode (sorted):
           <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./unsupported.log)</ol></p>
