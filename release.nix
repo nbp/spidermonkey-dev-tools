@@ -13,9 +13,14 @@ let
   jobs = {
 
     tarball =
-      pkgs.releaseTools.sourceTarball {
+      pkgs.releaseTools.sourceTarball rec {
         name = "ionmonkey-tarball";
         src = ionmonkeySrc;
+        version = "";
+        versionSuffix =
+          if officialRelease then ""
+          else if src ? rev then toString src.rev
+          else "";
         buildInputs = [];
         autoconf = pkgs.autoconf213;
         autoconfPhase = ''
@@ -44,9 +49,14 @@ let
           runHook preDist
 
           dir=$(basename $(pwd))
+          case $dir in
+            (git-export) vcs=git;;
+            (hg-archive) vcs=hg;;
+            (*) vcs=unk;;
+          esac
           cd ..
           ensureDir "$out/tarballs"
-          tar --exclude-vcs -caf "$out/tarballs/$dir.tar.bz2" $dir
+          tar --exclude-vcs -caf "$out/tarballs/$vcs-${version}${versionSuffix}.tar.bz2" $dir
           cd -
 
           runHook postDist
