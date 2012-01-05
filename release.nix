@@ -1,12 +1,16 @@
 { nixpkgs ? <nixpkgs>
 , officialRelease ? false
 , ionmonkeySrc ? { outPath = <ionmonkey>; }
+, doBuild ? true
+, doOptBuild ? true
+, doSpeedCheck ? true
+, doStats ? true
 }:
 
 let
   pkgs = import nixpkgs {};
 
-  jobs = rec {
+  jobs = {
 
     tarball =
       pkgs.releaseTools.sourceTarball {
@@ -50,18 +54,17 @@ let
         inherit officialRelease;
       };
 
+    } // pkgs.lib.optionalAttrs doBuild {
+
     jsBuild =
       { system ? builtins.currentSystem
-      , doBuild ? true
       }:
-
-      assert doBuild;
 
       let pkgs = import nixpkgs { inherit system; }; in
       with pkgs.lib;
-      (pkgs.releaseTools.nixBuild {
+      pkgs.releaseTools.nixBuild {
         name = "ionmonkey";
-        src = tarball;
+        src = jobs.tarball;
         postUnpack = ''
           sourceRoot=$sourceRoot/js/src
           echo Compile in $sourceRoot
@@ -89,16 +92,13 @@ let
           # Should think about reducing the priority of i686-linux.
           schedulingPriority = "100";
         };
-      }) // {
-        inherit tarball;
       };
+
+    } // pkgs.lib.optionalAttrs doOptBuild {
 
     jsOptBuild =
       { system ? builtins.currentSystem
-      , doOptBuild ? true
       }:
-
-      assert doOptBuild;
 
       let pkgs = import nixpkgs { inherit system; }; in
       let build = jobs.jsBuild { inherit system; }; in
@@ -112,6 +112,8 @@ let
         ;
       });
 
+    } // pkgs.lib.optionalAttrs doSpeedCheck {
+
     jsSpeedCheckJM =
       { system ? builtins.currentSystem
       , jitTestOpt ? " -m -n "
@@ -119,12 +121,9 @@ let
       , sunspider # ? { outPath = <sunspider>; }
       , v8 # ? { outPath = <v8>; }
       , kraken # ? { outPath = <kraken>; }
-      , doSpeedCheck ? true
       }:
 
-      assert doSpeedCheck;
-
-      let build = jsOptBuild { inherit system; }; in
+      let build = jobs.jsOptBuild { inherit system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
       let opts = jitTestOpt; in
       pkgs.releaseTools.nixBuild {
@@ -180,10 +179,7 @@ let
       { system ? builtins.currentSystem
       # bencmarks
       , sunspider, v8, kraken
-      , doSpeedCheck ? true
       }:
-
-      assert doSpeedCheck;
 
       let
         pkgs = import nixpkgs { inherit system; };
@@ -198,19 +194,17 @@ let
         name = attrs.name + "-ion";
       });
 
-    jsIonStats =
-      { system ? builtins.currentSystem
-      , doStats ? true
-      }:
+    } // pkgs.lib.optionalAttrs doStats {
 
-      assert doStats;
+    jsIonStats =
+      { system ? builtins.currentSystem }:
 
       let build = jobs.jsBuild { inherit system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
 
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-check";
-        src = tarball;
+        src = jobs.tarball;
         buildInputs = with pkgs; [ python gnused ];
         dontBuild = true;
         checkPhase = ''
