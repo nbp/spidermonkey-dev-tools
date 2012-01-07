@@ -70,26 +70,50 @@ let
       { system ? builtins.currentSystem
       }:
 
-      let pkgs = import nixpkgs { inherit system; }; in
+      let oldSystem = system; in
+      let
+        defaultPkgs = import nixpkgs { inherit system; };
+        crossSystem =
+          if oldSystem != "armv7l-linux" then null else {
+            config = "armv7l-unknown-linux-gnueabi";
+            bigEndian = false;
+            arch = "arm";
+            gcc.arch = "armv7-a";
+            float = "soft";
+            withTLS = true;
+            libc = "glibc";
+            platform = defaultPkgs.platforms.versatileARM;
+            openssl.system = "linux-generic32";
+          };
+          system = if isNull crossSystem then oldSystem else "x86_64-linux";
+          pkgs = import nixpkgs { inherit crossSystem system; };
+      in
+
       with pkgs.lib;
-      pkgs.releaseTools.nixBuild {
+      (pkgs.releaseTools.nixBuild {
         name = "ionmonkey";
+        stdenv = pkgs.stdenvCross;
         src = jobs.tarball;
         postUnpack = ''
           sourceRoot=$sourceRoot/js/src
           echo Compile in $sourceRoot
         '';
-        buildInputs = with pkgs; [ perl python ];
+        buildNativeInputs = with pkgs; [ perl python ];
+        # buildInputs = with pkgs; [ gdb ];
+
         CONFIG_SITE = pkgs.writeText "config.site" ''
-          ${if system == "armv7l-linux" then ''
-            CC="gcc -mcpu=cortex-a9 -mtune=cortex-a9"
-            CXX="g++ -mcpu=cortex-a9 -mtune=cortex-a9"
+          ${if oldSystem == "armv7l-linux" then ''
+            HOST_CC="gcc"
+            HOST_CXX="g++"
+            CC="armv7l-unknown-linux-gnueabi-gcc -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
+            CXX="armv7l-unknown-linux-gnueabi-g++ -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
           '' else ""
           }
         '';
+
         configureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ]
-        ++ optionals (system == "i686-linux") [ "i686-pv-linux-gnu" ]
-        ++ optionals (system == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ]
+        ++ optionals (oldSystem == "i686-linux") [ "i686-pv-linux-gnu" ]
+        ++ optionals (oldSystem == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ] # [ "--with-endian=little" "--enable-threadsafe" "--enable-ctypes" "--disable-shared-js" "armv7l-unknown-linux-gnueabi" ] #  "--enable-jemalloc"
         ;
         postInstall = ''
           ./config/nsinstall -t js $out/bin
@@ -102,7 +126,7 @@ let
           # Should think about reducing the priority of i686-linux.
           schedulingPriority = "100";
         };
-      };
+      }).hostDrv;
 
     } // pkgs.lib.optionalAttrs doOptBuild {
 
@@ -207,7 +231,8 @@ let
     } // pkgs.lib.optionalAttrs doStats {
 
     jsIonStats =
-      { system ? builtins.currentSystem }:
+      { system ? builtins.currentSystem
+      }:
 
       let build = jobs.jsBuild { inherit system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
