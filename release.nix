@@ -10,6 +10,14 @@
 let
   pkgs = import nixpkgs {};
 
+  # Hydra is using build.system to organize the results based on the
+  # architecture on which is has been build, but not based on the host on which
+  # the produced binaries are supposed to run.  To let hydra sort them as we
+  # expect, we lie to it by changing the system attribute such as it correspond
+  # to the system argument given to the nix expression, and thus let it sort as
+  # we expect.
+  lieHydraSystem = system: { inherit system; };
+
   jobs = {
 
     tarball =
@@ -90,7 +98,7 @@ let
       in
 
       with pkgs.lib;
-      (pkgs.releaseTools.nixBuild {
+      (pkgs.releaseTools.nixBuild rec {
         name = "ionmonkey";
         stdenv = pkgs.stdenvCross;
         src = jobs.tarball;
@@ -111,10 +119,14 @@ let
           }
         '';
 
-        configureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ]
+        optimizeConfigureFlags = [];
+        debugConfigureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ];
+        crossConfigureFlags = []
         ++ optionals (oldSystem == "i686-linux") [ "i686-pv-linux-gnu" ]
-        ++ optionals (oldSystem == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ] # [ "--with-endian=little" "--enable-threadsafe" "--enable-ctypes" "--disable-shared-js" "armv7l-unknown-linux-gnueabi" ] #  "--enable-jemalloc"
-        ;
+        ++ optionals (oldSystem == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ];
+
+        configureFlags = debugConfigureFlags ++ crossConfigureFlags;
+
         postInstall = ''
           ./config/nsinstall -t js $out/bin
         '';
@@ -126,7 +138,8 @@ let
           # Should think about reducing the priority of i686-linux.
           schedulingPriority = "100";
         };
-      }).hostDrv;
+      }).hostDrv
+      // lieHydraSystem oldSystem;
 
     } // pkgs.lib.optionalAttrs doOptBuild {
 
@@ -139,12 +152,12 @@ let
       with pkgs.lib;
 
       pkgs.lib.overrideDerivation build (attrs: {
-        name = "ionmonkey-opt";
-        configureFlags = []
-        ++ optionals (system == "i686-linux") [ "i686-pv-linux-gnu" ]
-        ++ optionals (system == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ]
-        ;
-      });
+        name = "ionmonkey-opt"
+        + pkgs.lib.optionalString (build ? crossConfig) ("-" + build.crossConfig);
+
+        configureFlags = with attrs; optimizeConfigureFlags ++ crossConfigureFlags;
+      })
+      // lieHydraSystem system;
 
     } // pkgs.lib.optionalAttrs doSpeedCheck {
 
