@@ -284,7 +284,7 @@ let
           echo -n .
           sed -n "/Unsupported opcode/ { s,(line .*),,; p }" ./log | sort | uniq -c | sort -nr > ./unsupported.log
           echo -n .
-          sed -n '/^Exit code: / { s/Exit code: //; p }' $out/failures.txt | sort -n | uniq ./exit-codes.log
+          sed -n '/^Exit code: / { s/Exit code: //; p }' $out/failures.txt | sort -n | uniq > ./exit-codes.log
 
           for ec in : $(cat ./exit-codes.log); do
             test $ec = : && continue
