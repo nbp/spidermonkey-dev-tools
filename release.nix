@@ -284,21 +284,42 @@ let
           echo -n .
           sed -n "/Unsupported opcode/ { s,(line .*),,; p }" ./log | sort | uniq -c | sort -nr > ./unsupported.log
           echo -n .
-          sed -n '/TEST/ d; /Assertion/ { s,/[^ ]*nix-build[^/]*/,,g; p };' $out/failures.txt | sort | uniq -c | sort -nr > ./assertions.log
+          sed -n '/^Exit code: / { s/Exit code: //; p }' $out/failures.txt | sort -n | uniq ./exit-codes.log
+
+          for ec in : $(cat ./exit-codes.log); do
+            test $ec = : && continue
+            echo -n .
+            sed -n '/TEST/ d; /Exit code: -11/ { x; s,/[^ ]*nix-build[^/]*/,,g; s,0x[0-9a-fA-F]*,0xADDR,g; p }; h' $out/failures.txt | \
+               sort | uniq -c | sort -nr > ./exit.$ec.log
+          done
+
+          ecToText() {
+            case $1 in
+              (-11) echo "Message before segmentation fault:";;
+              (-6) echo "C++ assertions:";;
+              (3) echo "JS assertions:";;
+              (*) echo "Message before exit code $1:";;
+            esac
+          }
 
           echo > $out/stats.html "
           <head><title>Compilation stats of IonMonkey on ${system}</title></head>
           <body>
           <p>Running system : ${system}</p>
+          <p>Number of tests : PASS: $pass, FAIL: $fail</p>
+          $(for ec in : $(cat ./exit-codes.log); do
+              test $ec = : && continue
+              echo "
+              <p>$(ecToText $ec)
+              <ol>$(sed 's,[^0-9]*\([0-9]\+\) \(.*\),<li value=\1>\2,' ./exit.$ec.log)</ol></p>
+              "
+            done)
           <p>Number of compilation failures : $comp_failures</p>
           <p>Unsupported opcode (sorted):
           <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./unsupported.log)</ol></p>
-          <p>Failing assertions:
-          <ol>$(sed 's,[^0-9]*\([0-9]\+\) \(.*\),<li value=\1>\2,' ./assertions.log)</ol></p>
           <p>Number of GVN congruence : $gvn</p>
           <p>Number of snapshots : $snapshots</p>
           <p>Number of bailouts : $bailouts</p>
-          <p>Number of tests : PASS: $pass, FAIL: $fail</p>
           </body>
           "
 
