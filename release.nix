@@ -262,6 +262,7 @@ let
 
     jsIonStats =
       { system ? builtins.currentSystem
+      , checkDirs ? "ion"
       }:
 
       let build = jobs.jsBuild { inherit system; }; in
@@ -277,7 +278,7 @@ let
           TZ="US/Pacific" \
           TZDIR="${pkgs.glibc}/share/zoneinfo" \
           IONFLAGS=all \
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow --timeout=10 ${build}/bin/js ion 2>&1 | tee ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow --timeout=10 ${build}/bin/js ${checkDirs} 2>&1 | tee ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
 
           # List of all failing test with the debug output.
           echo -n Report failures
@@ -323,6 +324,7 @@ let
           <head><title>Compilation stats of IonMonkey on ${system}</title></head>
           <body>
           <p>Running system : ${system}</p>
+          <p>Checked directories : ${checkDirs}</p>
           <p>Number of tests : PASS: $pass, FAIL: $fail</p>
           $(for ec in : $(cat ./exit-codes.log); do
               test $ec = : && continue
