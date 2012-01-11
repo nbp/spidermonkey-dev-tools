@@ -18,6 +18,106 @@ let
   # we expect.
   lieHydraSystem = system: { inherit system; };
 
+  cross = {system}:
+    let
+      pkgs = import nixpkgs { inherit system; };
+      crossSystem =
+        if system == "armv7l-linux" then {
+          config = "armv7l-unknown-linux-gnueabi";
+          bigEndian = false;
+          arch = "arm";
+          gcc.arch = "armv7-a";
+          float = "soft";
+          withTLS = true;
+          libc = "glibc";
+          platform = pkgs.platforms.versatileARM;
+          openssl.system = "linux-generic32";
+        }
+        else null;
+    in
+      rec {
+        build = {
+          system = if isNull crossSystem then system else "x86_64-linux";
+          pkgs = import nixpkgs { inherit crossSystem; inherit (build) system; };
+        };
+        host = {
+          system = system;
+          pkgs = import nixpkgs { inherit system; };
+        };
+      };
+
+  # we have to keep it away from the job, because we cannot extend the hostDrv
+  # with overriveDerivation yet.
+  buildIon =
+      { system ? builtins.currentSystem
+      , args ? (default: {})
+      }:
+
+      with (cross { inherit system; });
+      # with { inherit (build) pkgs; };
+      with pkgs.lib;
+
+      let
+        default = rec {
+          name = "ionmonkey";
+          stdenv = build.pkgs.stdenvCross;
+          src = jobs.tarball;
+
+          buildNativeInputs = with build.pkgs; [ perl python ];
+          # buildInputs = with pkgs; [ gdb ];
+
+          #postUnpack = ''
+          #  sourceRoot=$sourceRoot/js/src
+          #  echo Compile in $sourceRoot
+          #'';
+
+          CONFIG_SITE = pkgs.writeText "config.site" ''
+            ${if host.system == "armv7l-linux" then ''
+              HOST_CC="gcc"
+              HOST_CXX="g++"
+              CC="armv7l-unknown-linux-gnueabi-gcc -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
+              CXX="armv7l-unknown-linux-gnueabi-g++ -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
+            '' else ""
+            }
+          '';
+
+         preConfigure =
+           # Build out of source tree and make the source tree read-only.  This
+           # helps catch violations of the GNU Coding Standards (info
+           # "(standards) Configuration"), like `make distcheck' does.
+           '' mkdir "../build"
+              cd "../build"
+              configureScript="../$sourceRoot/js/src/configure"
+
+              echo "building out of source tree, from \`$PWD'..."
+           '';
+
+          optimizeConfigureFlags = [];
+          debugConfigureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ];
+          crossConfigureFlags = []
+          ++ optionals (host.system == "i686-linux") [ "i686-pv-linux-gnu" ]
+          ++ optionals (host.system == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ];
+
+          configureFlags = debugConfigureFlags ++ crossConfigureFlags;
+
+          #installPhase = "exit 1";
+          postInstall = ''
+            ./config/nsinstall -t js $out/bin
+          '';
+          doCheck = false;
+          dontStrip = true;
+
+          meta = {
+            description = "Build JS shell.";
+            # Should think about reducing the priority of i686-linux.
+            schedulingPriority = "100";
+          };
+        };
+      in
+
+      (pkgs.releaseTools.nixBuild (default // args default)).hostDrv
+      // lieHydraSystem host.system;
+
   jobs = {
 
     tarball =
@@ -78,68 +178,7 @@ let
       { system ? builtins.currentSystem
       }:
 
-      let oldSystem = system; in
-      let
-        defaultPkgs = import nixpkgs { inherit system; };
-        crossSystem =
-          if oldSystem != "armv7l-linux" then null else {
-            config = "armv7l-unknown-linux-gnueabi";
-            bigEndian = false;
-            arch = "arm";
-            gcc.arch = "armv7-a";
-            float = "soft";
-            withTLS = true;
-            libc = "glibc";
-            platform = defaultPkgs.platforms.versatileARM;
-            openssl.system = "linux-generic32";
-          };
-          system = if isNull crossSystem then oldSystem else "x86_64-linux";
-          pkgs = import nixpkgs { inherit crossSystem system; };
-      in
-
-      with pkgs.lib;
-      (pkgs.releaseTools.nixBuild rec {
-        name = "ionmonkey";
-        stdenv = pkgs.stdenvCross;
-        src = jobs.tarball;
-        postUnpack = ''
-          sourceRoot=$sourceRoot/js/src
-          echo Compile in $sourceRoot
-        '';
-        buildNativeInputs = with pkgs; [ perl python ];
-        # buildInputs = with pkgs; [ gdb ];
-
-        CONFIG_SITE = pkgs.writeText "config.site" ''
-          ${if oldSystem == "armv7l-linux" then ''
-            HOST_CC="gcc"
-            HOST_CXX="g++"
-            CC="armv7l-unknown-linux-gnueabi-gcc -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
-            CXX="armv7l-unknown-linux-gnueabi-g++ -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
-          '' else ""
-          }
-        '';
-
-        optimizeConfigureFlags = [];
-        debugConfigureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ];
-        crossConfigureFlags = []
-        ++ optionals (oldSystem == "i686-linux") [ "i686-pv-linux-gnu" ]
-        ++ optionals (oldSystem == "armv7l-linux") [ "armv7l-unknown-linux-gnueabi" ];
-
-        configureFlags = debugConfigureFlags ++ crossConfigureFlags;
-
-        postInstall = ''
-          ./config/nsinstall -t js $out/bin
-        '';
-        doCheck = false;
-        dontStrip = true;
-
-        meta = {
-          description = "Build JS shell.";
-          # Should think about reducing the priority of i686-linux.
-          schedulingPriority = "100";
-        };
-      }).hostDrv
-      // lieHydraSystem oldSystem;
+      buildIon { inherit system; };
 
     } // pkgs.lib.optionalAttrs doOptBuild {
 
@@ -147,17 +186,13 @@ let
       { system ? builtins.currentSystem
       }:
 
-      let pkgs = import nixpkgs { inherit system; }; in
-      let build = jobs.jsBuild { inherit system; }; in
-      with pkgs.lib;
-
-      pkgs.lib.overrideDerivation build (attrs: {
-        name = "ionmonkey-opt"
-        + pkgs.lib.optionalString (build ? crossConfig) ("-" + build.crossConfig);
-
-        configureFlags = with attrs; optimizeConfigureFlags ++ crossConfigureFlags;
-      })
-      // lieHydraSystem system;
+      buildIon {
+        inherit system;
+        args = default: with default; {
+          name = "ionmonkey-opt";
+          configureFlags = optimizeConfigureFlags ++ crossConfigureFlags;
+        };
+      };
 
     } // pkgs.lib.optionalAttrs doSpeedCheck {
 
