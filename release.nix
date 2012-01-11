@@ -196,20 +196,21 @@ let
 
     } // pkgs.lib.optionalAttrs doSpeedCheck {
 
-    jsSpeedCheckJM =
+    jsSpeedCheckIon =
       { system ? builtins.currentSystem
-      , jitTestOpt ? " -m -n "
       # bencmarks
       , sunspider # ? { outPath = <sunspider>; }
       , v8 # ? { outPath = <v8>; }
       , kraken # ? { outPath = <kraken>; }
       }:
 
+      let jitTestOpt = "--ion -n"; in
       let build = jobs.jsOptBuild { inherit system; }; in
       let pkgs = import nixpkgs { inherit system; }; in
       let opts = jitTestOpt; in
+
       pkgs.releaseTools.nixBuild {
-        name = "ionmonkey-speed-check";
+        name = "ionmonkey-bench";
         src = build;
         buildInputs = with pkgs; [ perl glibc ];
         dontBuild = true;
@@ -256,25 +257,6 @@ let
           schedulingPriority = "50";
         };
       };
-
-    jsSpeedCheckIon =
-      { system ? builtins.currentSystem
-      # bencmarks
-      , sunspider, v8, kraken
-      }:
-
-      let
-        pkgs = import nixpkgs { inherit system; };
-        build = jobs.jsSpeedCheckJM {
-          inherit system sunspider v8 kraken;
-          jitTestOpt = "--ion -n";
-        };
-      in
-      with pkgs.lib;
-
-      pkgs.lib.overrideDerivation build (attrs: {
-        name = attrs.name + "-ion";
-      });
 
     } // pkgs.lib.optionalAttrs doStats {
 
@@ -375,88 +357,6 @@ let
         };
       };
   };
-
-  speedTest = mode: gvn: licm: ra: inline: osr:
-    with pkgs.lib;
-    let
-      name = ""
-      + optionalString (mode == "eager") "Eager"
-      + optionalString (mode == "infer") "Infer"
-      + optionalString (mode == "none")  "None_"
-      + "_"
-      + optionalString (gvn == "off")         "GVNn"
-      + optionalString (gvn == "pessimistic") "GVNp"
-      + optionalString (gvn == "optimistic")  "GVNo"
-      + "_"
-      + optionalString (licm == "off") "LICMn"
-      + optionalString (licm == "on")  "LICMy"
-      + "_"
-      + optionalString (ra == "greedy") "RAg"
-      + optionalString (ra == "lsra")   "RAl"
-      + "_"
-      + optionalString (inline == "off") "INLn"
-      + optionalString (inline == "on")  "INLy"
-      + "_"
-      + optionalString (osr == "off") "OSRn"
-      + optionalString (osr == "on")  "OSRy"
-      ;
-
-      args = "--ion"
-      + optionalString (mode == "eager") " --ion-eager"
-      + optionalString (mode == "infer") " -n"
-      + " --ion-gvn=${gvn}"
-      + " --ion-licm=${licm}"
-      + " --ion-regalloc=${ra}"
-      + " --ion-inlining=${inline}"
-      + " --ion-osr=${osr}"
-      ;
-    in
-
-    setAttrByPath [ ("jsSpeedCheckIon_" + name) ] (
-      { system ? builtins.currentSystem
-      , sunspider, v8, kraken
-      }:
-
-      let
-        pkgs = import nixpkgs { inherit system; };
-        build = jobs.jsSpeedCheckJM {
-          inherit system sunspider v8 kraken;
-          jitTestOpt = args;
-        };
-      in
-      with pkgs.lib;
-
-      pkgs.lib.overrideDerivation build (attrs: {
-        name = attrs.name + "-" + name;
-      })
-    );
-
-  hasOnlyOneVariation = switches: with pkgs.lib;
-    builtins.lessThan
-      (length (filter (switch: !switch.default) switches))
-      2;
-
-  # First value of the list of option is the default value.
-  switchOver = defaults: rest: f:  with pkgs.lib;
-    let switches =
-         map (v: {value = v; default = true;}) defaults
-      ++ map (v: {value = v; default = false;}) rest;
-    in
-      flip concatMap switches f;
-
-  speedTests = with pkgs.lib;
-    fold (x: y: x // y) {} (
-      switchOver ["infer"] ["eager" "none"] (mode:
-      switchOver [ "optimistic" ] [ "off" "pessimistic" ] (gvn:
-      switchOver [ "on" ] [ "off"] (licm:
-      switchOver [ "lsra" ] [ "greedy" ] (ra:
-      switchOver [ "on" ] [ "off"] (inline:
-      switchOver [ "on" ] [ "off"] (osr:
-        optional (hasOnlyOneVariation [mode gvn licm ra inline osr]) (
-          speedTest mode.value gvn.value licm.value ra.value inline.value osr.value
-        )
-      ))))))
-   );
 
 in
   jobs /* // speedTests */
