@@ -296,6 +296,10 @@ let
           echo -n .
           bailouts=$(grep -c "\[Bailouts\] Bailing out" ./log || true)
           echo -n .
+          sed -n "/bailing from/ { s/ *\[[0-9]\+\]//g; p }" ./log | sort | uniq -c | sort -nr > ./bailouts.log
+          echo -n .
+          sed -n "/Bailing out/ { s/.*jit-test/jit-test/; s/,.*//; h; }; /bailing from/ { s/ \[[0-9]\+\]//g; s/^\[Bailouts\] //; G; s/\\n/ (/; s/$/)/; p }" bailouts.log | sort | uniq -c | sort -nr > ./bails-from.log
+          echo -n .
           pass=$(grep -c "^TEST-PASS" ./log || true)
           echo -n .
           fail=$(grep -c "^TEST-UNEXPECTED" ./log || true)
@@ -338,7 +342,10 @@ let
           <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./unsupported.log)</ol></p>
           <p>Number of GVN congruence : $gvn</p>
           <p>Number of snapshots : $snapshots</p>
-          <p>Number of bailouts : $bailouts</p>
+          <p>Number of bailouts : $bailouts
+          <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./bailouts.log)</ol></p>
+          <p>Bailouts signature per tests:
+          <ol>$(sed 's,[^0-9]*\([0-9]\+\).*: \(.*\),<li value=\1>\2,' ./bails-from.log)</ol></p>
           </body>
           "
 
