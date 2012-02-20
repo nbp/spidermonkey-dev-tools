@@ -296,9 +296,10 @@ let
           echo -n .
           bailouts=$(grep -c "\[Bailouts\] Bailing out" ./log || true)
           echo -n .
-          sed -n "/bailing from/ { s/ *\[[0-9]\+\]//g; p }" ./log | sort | uniq -c | sort -nr > ./bailouts.log
+          sed -n "/Bailing out/ { s/.*jit-test/jit-test/; s/,.*//; h; }; /bailing from/ { s/ \[[0-9]\+\]//g; s/^\[Bailouts\] //; G; s/\\n/ (/; s/$/)/; x; s/.*//; x; /(.\+)/ { p } }" ./log > ./bailouts-from.log
+          sort ./bailouts-from.log | uniq -c | sort -nr > ./bailouts-from-sorted.log
           echo -n .
-          sed -n "/Bailing out/ { s/.*jit-test/jit-test/; s/,.*//; h; }; /bailing from/ { s/ \[[0-9]\+\]//g; s/^\[Bailouts\] //; G; s/\\n/ (/; s/$/)/; p }" ./log | sort | uniq -c | sort -nr > ./bails-from.log
+          sed "s/ *(.*)//" ./bailouts-from.log | sort | uniq -c | sort -nr > ./bailouts-sorted.log
           echo -n .
           pass=$(grep -c "^TEST-PASS" ./log || true)
           echo -n .
@@ -343,9 +344,9 @@ let
           <p>Number of GVN congruence : $gvn</p>
           <p>Number of snapshots : $snapshots</p>
           <p>Number of bailouts : $bailouts
-          <ol>$(sed 's,[^0-9]*\([0-9]\+\).* from \(.*\),<li value=\1>\2,' ./bailouts.log)</ol></p>
+          <ol>$(sed 's,[^0-9]*\([0-9]\+\).* from \(.*\),<li value=\1>\2,' ./bailouts-sorted.log)</ol></p>
           <p>Bailouts signature per tests:
-          <ol>$(sed 's,[^0-9]*\([0-9]\+\).* from \(.*\),<li value=\1>\2,' ./bails-from.log)</ol></p>
+          <ol>$(sed 's,[^0-9]*\([0-9]\+\).* from \(.*\),<li value=\1>\2,' ./bailouts-from-sorted.log)</ol></p>
           </body>
           "
 
