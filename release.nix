@@ -79,6 +79,13 @@ let
               CXX="armv7l-unknown-linux-gnueabi-g++ -fno-short-enums -fno-exceptions -march=armv7-a -mthumb -mfpu=vfp -mfloat-abi=softfp -pipe" # -mcpu=cortex-a9 -mtune=cortex-a9"
             '' else ""
             }
+            ${if host.system == "x86_64-darwin" then ''
+              # These are use to override the configure script impurity which
+              # default to gcc-4.2 binary name, and enforce the one define in
+              # the environment.
+              CC="gcc"
+              CXX="g++"
+            '' else ""}
           '';
 
          preConfigure =
