@@ -321,11 +321,13 @@ let
             echo -n .
             sed -n '/TEST/ d; /Exit code: '$ec'/ { x; s,/[^ ]*nix-build[^/]*/,,g; s,0x[0-9a-fA-F]*,0xADDR,g; p }; h' $out/failures.txt | \
                sort | uniq -c | sort -nr > ./exit.$ec.log
+            sed -n sed -n '/^TEST/ h; /Exit code: '$ec'/ { x; s,/[^ ]*nix-build.*/js/src,.,g; s,^[^|]*|,,; s,jit_test.py,./js,; s,[ ]*|, ,; s,:, =>,; s,0x[0-9a-fA-F]*,0xADDR,g; p }' $out/failures.txt > ./testexit.$ec.log
           done
 
           ecToText() {
             case $1 in
               (-11) echo "Message before segmentation fault:";;
+              (-9) echo "Timeout? (killed):";;
               (-6) echo "C++ assertions:";;
               (3) echo "JS assertions:";;
               (*) echo "Message before exit code $1:";;
@@ -336,13 +338,16 @@ let
           <head><title>Compilation stats of IonMonkey on ${system}</title></head>
           <body>
           <p>Running system : ${system}</p>
-          <p>Checked directories : ${checkDirs}</p>
+          ${if checkDirs == "" then
+            "<p>Checked directories : ${checkDirs}</p>"
+          else ""}
           <p>Number of tests : PASS: $pass, FAIL: $fail</p>
           $(for ec in : $(cat ./exit-codes.log); do
               test $ec = : && continue
               echo "
               <p>$(ecToText $ec)
               <ol>$(sed 's,[^0-9]*\([0-9]\+\) \(.*\),<li value=\1>\2,' ./exit.$ec.log)</ol></p>
+              <ul>$(sed 's,\(.*\),<li>\1,' ./testexit.$ec.log)</ul></p>
               "
             done)
           <p>Number of compilation failures : $comp_failures</p>
