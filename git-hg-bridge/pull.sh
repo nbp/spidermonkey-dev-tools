@@ -96,34 +96,56 @@ createGitRepo() {
 # doing these modifications we have to lock the repository.
 updateFromRepo() {
     local edgeName=$1
-    if hg incoming --bundle .hg/incoming.bundle $edgeName; then
-        branch=$edgeName/master
 
-        # The double lock gives the priority to the pusher and avoid locking
-        # concurrent git repositories.
-        ( flock -x 11;
+    local branch=$edgeName/master
+    local tip=$(hg identify $(hg paths $edgeName))
+
+    # Check if the current repository has the changeset.
+    if desc=$(hg log -P $tip -r $tip 2>/dev/null); then
+        found=$(
+            echo $desc | \
+                sed -n "\,bookmark: *$branch, { p }" | \
+                wc -l
+        )
+
+        # We found the master branch at the same location of the tip, we can
+        # skip the rest of the update procedure.
+        if test $found -ne 0; then
+            return 0;
+        fi
+    else
+        # If the remote tip is not among the changeset of the repository, then
+        # pull changes of the remote repository.
+        hg incoming --bundle .hg/incoming.bundle $edgeName
+
         ( flock -x 10;
 
         # Pull latest changes.
           hg pull $edgeName
 
-        # If there are incoming changes, then the tip will point to them.  Thus
-        # reset the corresponding branch to the tip.
-          hg bookmark -f $branch -r tip
-
-        # Update the git repository.
-          hg gexport
-
         ) 10> $lockfile
-
-        # Update the git-repo from the git-bridge.
-        if ! test -d $repoPath/$edgeName; then
-            createGitRepo $edgeName false
-        fi
-        GIT_DIR=$repoPath/$edgeName git fetch origin
-
-        ) 11> $lockfile.$edgeName
     fi
+
+    # The double lock gives the priority to the pusher and avoid locking
+    # concurrent git repositories.
+    ( flock -x 11;
+    ( flock -x 10;
+
+    # Reset the bookmark to the remote tip.
+      hg bookmark -f $branch -r $tip
+
+    # Update the git repository.
+      hg gexport
+
+    ) 10> $lockfile
+
+    # Update the git-repo from the git-bridge.
+    if ! test -d $repoPath/$edgeName; then
+         createGitRepo $edgeName false
+    fi
+    GIT_DIR=$repoPath/$edgeName git fetch origin
+
+    ) 11> $lockfile.$edgeName
 }
 
 # create push repositories
