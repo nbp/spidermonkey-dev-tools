@@ -319,10 +319,10 @@ let
           for ec in : $(cat ./exit-codes.log); do
             test $ec = : && continue
             echo -n -
-            sed -n '/TEST/ d; /Exit code: '$ec'/ { x; s,/[^ ]*nix-build[^/]*/,,g; s,0x[0-9a-fA-F]*,0xADDR,g; p }; h' $out/failures.txt | \
+            sed -n '/TEST/ d; /Exit code: '$ec'/ { x; s,/[^ ]*nix-build[^/ ]*/,,g; s,0x[0-9a-fA-F]*,0xADDR,g; p }; h' $out/failures.txt | \
                sort | uniq -c | sort -nr > ./exit.$ec.log
             echo -n -
-            sed -n '/^TEST/ h; /Exit code: '$ec'/ { x; s,/[^ ]*nix-build.*/js/src,.,g; s,^[^|]*|,,; s,jit_test.py,./js,; s,[ ]*|, ,; s,:, =>,; s,0x[0-9a-fA-F]*,0xADDR,g; p }' $out/failures.txt > ./testexit.$ec.log
+            sed -n '/^TEST/ h; /Exit code: '$ec'/ { x; s,/[^ ]*nix-build[^ ]*/js/src,.,g; s,^[^|]*|,,; s,jit_test.py,./js,; s,[ ]*|, ,; s,:, =>,; s,0x[0-9a-fA-F]*,0xADDR,g; p }' $out/failures.txt > ./testexit.$ec.log
             echo -n .
           done
 
