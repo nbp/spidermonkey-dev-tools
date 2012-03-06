@@ -1,0 +1,52 @@
+This directory contains tools used to transparently push to a git repository
+through a git-hg bridge.  This tool is setup inside a mercurial repository which
+is called the hg-bridge.
+
+
+                        g1                           h1
+                            \                     /
+                              \                 /
+                        g2 ------ g ------- h ------ h2
+                              /                 \
+                            /                     \
+                        g3                           h3
+
+«g1», «g2» and «g3» are _git-repositories_ which master branches are clones of
+_hg-repositories_ «h1», «h2» and «h3» tips.  «h» is the _hg-bridge_ which is
+used to export and import commits to the _git-bridge_ labeled «g».  «1», «2» and
+«3» are the edge names.
+
+The expected layout is:
+
+  project-bridge/      -- hg-bridge
+    .hg/
+      bridge/          -- This directory
+      git/             -- git-bridge
+      repos/
+      <edge names>   -- git-repo (g1, g2 and g3)
+      sync.lock
+      sync.lock.<edge names>
+
+Edge names are listed inside the hg-bridge configuration file (namely
+project-bridge/.hg/hgrc) and are stored in the path section.
+
+  [paths]
+  try-pushonly = ssh://hg.mozilla.org/try
+  mozilla-inbound = ssh://hg.mozilla.org/integration/mozilla-inbound
+  mozilla-central = ssh://hg.mozilla.org/mozilla-central
+  ionmonkey = ssh://hg.mozilla.org/projects/ionmonkey
+
+Edges names are the name on the left hand side of the equals. If it ends with
+«-pushonly», no data would be pulled into hg-bridge, but a git-repo would be
+created to enable pushes.
+
+Git repositories are created from the list of paths and configured automatically
+to setup handle pushes.
+
+This bridge script are relying on hg-git project to map repositories from one to
+another.  To enable it you will need to install python-dulwich (dependency of
+hg-git) and add the following lines to hg-bridge configuration file.
+
+  [extensions]
+  hgext.bookmarks =
+  hggit = <path to hg-git>
