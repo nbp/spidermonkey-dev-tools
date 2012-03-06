@@ -101,18 +101,14 @@ updateFromRepo() {
     local tip=$(hg identify $(hg paths $edgeName))
 
     # Check if the current repository has the changeset.
-    if desc=$(hg log -P $tip -r $tip 2>/dev/null); then
-        found=$(
-            echo $desc | \
-                sed -n "\,bookmark: *$branch, { p }" | \
-                wc -l
-        )
+    if desc=$(hg log -r $tip --template ' {bookmarks} ' 2>/dev/null); then
 
         # We found the master branch at the same location of the tip, we can
         # skip the rest of the update procedure.
-        if test $found -ne 0; then
+        if echo $desc | grep -c " $branch " >/dev/null; then
             return 0;
         fi
+
     else
         # If the remote tip is not among the changeset of the repository, then
         # pull changes of the remote repository.
