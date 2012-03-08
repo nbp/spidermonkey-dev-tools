@@ -210,9 +210,9 @@ let
     jsSpeedCheckIon =
       { system ? builtins.currentSystem
       # bencmarks
-      , sunspider # ? { outPath = <sunspider>; }
-      , v8 # ? { outPath = <v8>; }
-      , kraken # ? { outPath = <kraken>; }
+      , sunspider ? { outPath = <sunspider>; }
+      , v8 ? { outPath = <v8>; }
+      , kraken ? { outPath = <kraken>; }
       }:
 
       let jitTestOpt = "--ion -n"; in
@@ -223,42 +223,70 @@ let
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-bench";
         src = build;
-        buildInputs = with pkgs; [ perl glibc ];
+        buildInputs = with pkgs; [ perl glibc valgrind ];
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
           export TZ="US/Pacific"
           export TZDIR="${pkgs.glibc}/share/zoneinfo"
 
-          ensureDir $out/sunspider
-          ensureDir $out/kraken
-
           # run sunspider
           cp -r ${sunspider} ./sunspider
           chmod -R u+rw ./sunspider
           cd ./sunspider
           latest=$(ls -1 ./tests/ | sed -n '/sunspider/ { s,/$,,; p }' | sort -r | head -n 1)
-          perl ./sunspider --shell ${build}/bin/js --args="${jitTestOpt}" --suite=$latest | tee $out/sunspider.log
-          for f in *-results; do
-              cp -r $f $out/sunspider
+          ensureDir $out/$latest
+          for test in $(cat ./tests/$latest/LIST); do
+              path=$latest/$test
+              args="${jitTestOpt}"
+              if test -e ./tests/$path-data.js; then
+                  args="$args -f ./tests/$path-data.js"
+              fi
+              args="$args -f ./tests/$path.js"
+              callgrindOutput=$out/$path.callgrind
+
+              valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
+                  echo "report $path.callgrind $callgrindOutput" >> $out/nix-support/hydra-build-products || \
+                  true
           done
           cd -
+
           # run kraken
           cp -r ${kraken} ./kraken
           chmod -R u+rw ./kraken
           cd ./kraken
           latest=$(ls -1 ./tests/ | sed -n '/kraken/ { s,/$,,; p }' | sort -r | head -n 1)
-          perl ./sunspider --shell ${build}/bin/js --args="${jitTestOpt}" --suite=$latest | tee $out/kraken.log
-          for f in *-results; do
-              cp -r $f $out/kraken
+          ensureDir $out/$latest
+          for test in $(cat ./tests/$latest/LIST); do
+              path=$latest/$test
+              args="${jitTestOpt}"
+              if test -e ./tests/$path-data.js; then
+                  args="$args -f ./tests/$path-data.js"
+              fi
+              args="$args -f ./tests/$path.js"
+              callgrindOutput=$out/$path.callgrind
+
+              valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
+                  echo "report $path.callgrind $callgrindOutput" >> $out/nix-support/hydra-build-products || \
+                  true
           done
           cd -
+
           # run v8
           cd ${v8}
-          ${build}/bin/js ${jitTestOpt} ./run.js | tee $out/v8.log
+          ensureDir $out/v8
+          for test in $(sed -n '/^load/ { /base.js/ d; s/.*(.\(.*\)\.js.).*/\1/; p } ' run.js); do
+              path=v8/$test
+              args="${jitTestOpt}"
+              args="$args -f base.js"
+              args="$args -f $test.js"
+              callgrindOutput=$out/$path.callgrind
+
+              valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
+                  echo "report $path.callgrind $callgrindOutput" >> $out/nix-support/hydra-build-products || \
+                  true
+          done
           cd -
-          sed -n '/====/,/Results/ { p }' $out/sunspider.log $out/kraken.log | cat - $out/v8.log > $out/summary.txt
-          echo "report stats $out/summary.txt" > $out/nix-support/hydra-build-products
         '';
         dontInstall = true;
         dontFixup = true;
