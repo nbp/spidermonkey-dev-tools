@@ -88,18 +88,21 @@ let
             '' else ""}
           '';
 
-         preConfigure =
-           # Build out of source tree and make the source tree read-only.  This
-           # helps catch violations of the GNU Coding Standards (info
-           # "(standards) Configuration"), like `make distcheck' does.
-           '' mkdir "../build"
-              cd "../build"
-              configureScript="../$sourceRoot/js/src/configure"
+          preConfigure =
+          # Build out of source tree and make the source tree read-only.  This
+          # helps catch violations of the GNU Coding Standards (info
+          # "(standards) Configuration"), like `make distcheck' does.
+          '' mkdir "../build"
+             cd "../build"
+             configureScript="../$sourceRoot/js/src/configure"
 
-              echo "building out of source tree, from \`$PWD'..."
-           '';
+             echo "building out of source tree, from \`$PWD'..."
+          '';
 
-          optimizeConfigureFlags = [];
+          # Print g++/gcc/ld command line addition made by Nix.
+          # postConfigure = ''export  NIX_DEBUG=1'';
+
+          optimizeConfigureFlags = [ "--enable-debug-symbols=-ggdb3" ];
           debugConfigureFlags = [ "--enable-debug=-ggdb3" "--disable-optimize" ];
           crossConfigureFlags = []
           ++ optionals (host.system == "i686-linux") [ "i686-pv-linux-gnu" ]
@@ -112,6 +115,7 @@ let
             ./config/nsinstall -t js $out/bin
           '';
           doCheck = false;
+          NIX_STRIP_DEBUG = 0;
           dontStrip = true;
 
           meta = {
