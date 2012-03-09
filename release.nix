@@ -220,10 +220,17 @@ let
       let pkgs = import nixpkgs { inherit system; }; in
       let opts = jitTestOpt; in
 
+      let
+        gprof2dot = pkgs.fetchgit {
+          url = "https://code.google.com/p/jrfonseca.gprof2dot/";
+          rev = "13ecb3cd20d60d84f0cfd5c06c9268e86b9d1a61";
+        };
+      in
+
       pkgs.releaseTools.nixBuild {
         name = "ionmonkey-bench";
         src = build;
-        buildInputs = with pkgs; [ perl glibc valgrind ];
+        buildInputs = with pkgs; [ perl python glibc valgrind graphviz ];
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
@@ -243,10 +250,14 @@ let
               args="$args -f ./tests/$latest/$test.js"
               callgrindOutput=$out/$latest-$test.callgrind
 
-              valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
-                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products || \
-                  true
-          done
+              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args ; then
+                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
+                  python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
+                  dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
+                  echo "file callgrind-png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
+              fi
+              echo
+          done | sed 's/==[0-9]*==/==sunspider==/'
           cd -
 
           # run kraken
@@ -262,10 +273,14 @@ let
               args="$args -f ./tests/$latest/$test.js"
               callgrindOutput=$out/$latest-$test.callgrind
 
-              valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
-                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products || \
-                  true
-          done
+              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args ; then
+                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
+                  python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
+                  dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
+                  echo "file callgrind-png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
+              fi
+              echo
+          done | sed 's/==[0-9]*==/==kraken==/'
           cd -
 
           # run v8
@@ -275,10 +290,14 @@ let
               args="${jitTestOpt} -f base.js -f $test.js"
               callgrindOutput=$out/$latest-$test.callgrind
 
-              valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
-                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products || \
-                  true
-          done
+              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args ; then
+                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
+                  python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
+                  dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
+                  echo "file callgrind-png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
+              fi
+              echo
+          done | sed 's/==[0-9]*==/==v8==/'
           cd -
         '';
         dontInstall = true;
