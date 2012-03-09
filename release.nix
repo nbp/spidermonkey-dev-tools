@@ -235,18 +235,16 @@ let
           chmod -R u+rw ./sunspider
           cd ./sunspider
           latest=$(ls -1 ./tests/ | sed -n '/sunspider/ { s,/$,,; p }' | sort -r | head -n 1)
-          ensureDir $out/$latest
           for test in $(cat ./tests/$latest/LIST); do
-              path=$latest/$test
               args="${jitTestOpt}"
-              if test -e ./tests/$path-data.js; then
-                  args="$args -f ./tests/$path-data.js"
+              if test -e ./tests/$latest/$test-data.js; then
+                  args="$args -f ./tests/$latest/$test-data.js"
               fi
-              args="$args -f ./tests/$path.js"
-              callgrindOutput=$out/$path.callgrind
+              args="$args -f ./tests/$latest/$test.js"
+              callgrindOutput=$out/$latest-$test.callgrind
 
               valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
-                  echo "report $path.callgrind $callgrindOutput" >> $out/nix-support/hydra-build-products || \
+                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products || \
                   true
           done
           cd -
@@ -256,34 +254,29 @@ let
           chmod -R u+rw ./kraken
           cd ./kraken
           latest=$(ls -1 ./tests/ | sed -n '/kraken/ { s,/$,,; p }' | sort -r | head -n 1)
-          ensureDir $out/$latest
           for test in $(cat ./tests/$latest/LIST); do
-              path=$latest/$test
               args="${jitTestOpt}"
-              if test -e ./tests/$path-data.js; then
-                  args="$args -f ./tests/$path-data.js"
+              if test -e ./tests/$latest/$test-data.js; then
+                  args="$args -f ./tests/$latest/$test-data.js"
               fi
-              args="$args -f ./tests/$path.js"
-              callgrindOutput=$out/$path.callgrind
+              args="$args -f ./tests/$latest/$test.js"
+              callgrindOutput=$out/$latest-$test.callgrind
 
               valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
-                  echo "report $path.callgrind $callgrindOutput" >> $out/nix-support/hydra-build-products || \
+                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products || \
                   true
           done
           cd -
 
           # run v8
           cd ${v8}
-          ensureDir $out/v8
+          latest=v8
           for test in $(sed -n '/^load/ { /base.js/ d; s/.*(.\(.*\)\.js.).*/\1/; p } ' run.js); do
-              path=v8/$test
-              args="${jitTestOpt}"
-              args="$args -f base.js"
-              args="$args -f $test.js"
-              callgrindOutput=$out/$path.callgrind
+              args="${jitTestOpt} -f base.js -f $test.js"
+              callgrindOutput=$out/$latest-$test.callgrind
 
               valgrind --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args && \
-                  echo "report $path.callgrind $callgrindOutput" >> $out/nix-support/hydra-build-products || \
+                  echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products || \
                   true
           done
           cd -
