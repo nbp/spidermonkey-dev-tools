@@ -250,13 +250,12 @@ let
               args="$args -f ./tests/$latest/$test.js"
               callgrindOutput=$out/$latest-$test.callgrind
 
-              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args ; then
+              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args 2>&1; then
                   echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
                   python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
                   dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
-                  echo "file callgrind-png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
+                  echo "file png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
               fi
-              echo
           done | sed 's/==[0-9]*==/==sunspider==/'
           cd -
 
@@ -273,13 +272,12 @@ let
               args="$args -f ./tests/$latest/$test.js"
               callgrindOutput=$out/$latest-$test.callgrind
 
-              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args ; then
+              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args 2>&1; then
                   echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
                   python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
                   dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
-                  echo "file callgrind-png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
+                  echo "file png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
               fi
-              echo
           done | sed 's/==[0-9]*==/==kraken==/'
           cd -
 
@@ -290,16 +288,16 @@ let
               args="${jitTestOpt} -f base.js -f $test.js"
               callgrindOutput=$out/$latest-$test.callgrind
 
-              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args ; then
+              if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args 2>&1; then
                   echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
                   python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
                   dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
-                  echo "file callgrind-png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
+                  echo "file png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
               fi
-              echo
           done | sed 's/==[0-9]*==/==v8==/'
           cd -
         '';
+
         dontInstall = true;
         dontFixup = true;
 
