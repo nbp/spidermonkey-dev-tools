@@ -72,13 +72,18 @@ echo "Get mercurial repository lock for pushing from the bridge."
     fi
 
     if hg push $force -r $edgeName/push $edgeName; then
-        if test $pushOnly = true ; then
+        if test $pushOnly != true ; then
             # Update the bookmark of the main branch of the repository in which
-            # we pushed because the tip will not be updated by the next pull.
+            # we pushed.  This is not needed since the git repository will still
+            # map the changes accepted by mercurial, but this keep repositories in
+            # a state which could have been produced by hg-git.
             hg bookmark -f $edgeName/master -r $edgeName/push
 
-            # Export the bookmark update to the git-bridge.
-            hg gexport
+            # Identically we could export the updated master branch to git, but the
+            # update hook will accept this the changes and thus update the master
+            # branch as well as we did with the bookmark.
+
+            # hg gexport
         fi
     else
         error=$?

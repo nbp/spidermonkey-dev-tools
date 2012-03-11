@@ -5,20 +5,19 @@ lockfile=./.hg/sync.lock
 gitClone=./.hg/git
 repoPath=./.hg/repos
 bridgePath=./.hg/bridge
+hgConf=./.hg/hgrc
 pullFlag=./.hg/pull.run
 
 usage() {
-    echo 1>&2 'pull.sh <hgrepo> <sleep>
+    echo 1>&2 'pull.sh <hgrepo>
 
 Import mercurial modifications and transfer then to each master branch of
 git repository and tries.'
     exit 1
 }
 
-test $# -ne 2 && usage;
+test $# -ne 1 && usage;
 hgrepo=$1
-sleep=$2
-
 
 cd $hgrepo;
 hgrepo=$(pwd)
@@ -38,7 +37,7 @@ getPullRepos() {
           p;
           b newline;
         }
-      }' ./hgrc
+      }' $hgConf
 }
 
 getPushRepos() {
@@ -52,7 +51,7 @@ getPushRepos() {
           /-pushonly$/ { s/-pushonly$//; p; b newline; };
           b newline;
         }
-      }' ./hgrc
+      }' $hgConf
 }
 
 
@@ -62,6 +61,7 @@ createGitRepo() {
     local pushOnly=$2
     local edgeName=$repo
 
+    echo "Create repository $edgeName"
     if test $pushOnly = true; then
         edgeName=$repo-pushonly
     fi
@@ -70,8 +70,9 @@ createGitRepo() {
     GIT_DIR=$repoPath/$repo
     export GIT_DIR
 
+    mkdir -p $GIT_DIR
     git init --bare
-    git remote add $gitClone
+    git remote add origin $gitClone
     # Ensure this repository only fetch its corresponding master branch.
     git config --replace-all remote.origin.fetch "+refs/heads/$edgeName/master:refs/heads/master"
 
@@ -85,8 +86,8 @@ createGitRepo() {
     git config --add hooks.bridge.edgeName "$edgeName"
     git config --add hooks.bridge.pushOnly "$pushOnly"
     mkdir -p $repoPath/$repo/hooks
-    cp $bridgePath $repoPath/$repo/hooks/update
-    chmod a+x $repoPath/$repo/hooks/update
+    cp $bridgePath/push.sh $repoPath/$repo/hooks/update
+    chmod u+x $repoPath/$repo/hooks/update
 }
 
 # Get one repository name and look if there is any pending modification. If
@@ -97,19 +98,23 @@ createGitRepo() {
 updateFromRepo() {
     local edgeName=$1
 
+    echo "$edgeName: Looking for update from $(hg paths $edgeName)."
     local branch=$edgeName/master
     local tip=$(hg identify $(hg paths $edgeName))
 
     # Check if the current repository has the changeset.
-    if desc=$(hg log -r $tip --template ' {bookmarks} ' 2>/dev/null); then
+    if desc=$(hg log -r $tip --template '[ {bookmarks} ]' 2>/dev/null); then
 
         # We found the master branch at the same location of the tip, we can
         # skip the rest of the update procedure.
         if echo $desc | grep -c " $branch " >/dev/null; then
+            echo "$edgeName: No update needed."
             return 0;
         fi
 
     else
+        echo "$edgeName: Pull changes."
+
         # If the remote tip is not among the changeset of the repository, then
         # pull changes of the remote repository.
         hg incoming --bundle .hg/incoming.bundle $edgeName
@@ -121,6 +126,8 @@ updateFromRepo() {
 
         ) 10> $lockfile
     fi
+
+    echo "$edgeName: Import changes into git."
 
     # The double lock gives the priority to the pusher and avoid locking
     # concurrent git repositories.
@@ -142,21 +149,18 @@ updateFromRepo() {
     GIT_DIR=$repoPath/$edgeName git fetch origin
 
     ) 11> $lockfile.$edgeName
+
+    echo "$edgeName: Update complete."
 }
 
 # create push repositories
-for edgeName in $(getPullRepos); do
+for edgeName in $(getPushRepos); do
     if ! test -d $repoPath/$edgeName; then
         createGitRepo $edgeName true
     fi
 done
 
 # Check if there is any pending changes.
-touch $pullFlag;
-while test -e $pullFlag; do
-    for edgeName in $(getPullRepos); do
-        test -e $pullFlag || break
-        updateFromRepo $edgeName
-        sleep $sleep
-    done
+for edgeName in $(getPullRepos); do
+    updateFromRepo $edgeName
 done
