@@ -1,0 +1,4 @@
+changeset-to-commit <changeset>
+
+	Returns the git commit corresponding to the mercurial changeset.
+

@@ -1,0 +1,4 @@
+#!/bin/sh
+
+cd
+ls -1d *.git

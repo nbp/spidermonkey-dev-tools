@@ -1,0 +1,9 @@
+mapfile
+
+	Output the mapfile used by hg-git.  This is useful if you want to start
+	your own mirror of mercurial or if you want to map commit to changeset
+	without the need of a remote server.
+
+	To make your own mirror, you will also need to do a bare clone of
+	bridge.git.
+

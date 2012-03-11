@@ -1,0 +1,4 @@
+hg-fetch
+
+	Use your credentials to update the git mirror with the most recent mercurial changes.
+

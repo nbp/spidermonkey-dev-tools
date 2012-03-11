@@ -1,0 +1,8 @@
+#!/bin/sh
+
+echo "Available commands:"
+
+cd "$(dirname "$0")"
+for cmd in *.usage; do
+    cat $cmd
+done

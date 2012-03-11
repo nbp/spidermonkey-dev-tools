@@ -1,0 +1,18 @@
+#!/bin/sh
+
+usage() {
+    echo 1>&2 "useradd <login> <publickey>
+
+This script add an entry in the authorized keys to enable a user account. The
+user is the mercurial user used to authenticate the owner of the private key
+against the mercurial server.
+"
+}
+
+test $# -eq 2 || usage
+user="$1"
+key="$2"
+authopt="no-port-forwarding,no-X11-forwarding,environment=\"HGUSER=$user\""
+
+echo "$authopt  $key" >> ~/.ssh/authorized_keys
+

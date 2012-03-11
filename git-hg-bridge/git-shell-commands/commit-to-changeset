@@ -1,0 +1,12 @@
+#!/bin/sh
+
+usage () {
+    echo 1>&2 'commit-to-changeset <commit-rev>
+
+Returns the changeset corresponding to a commit.
+'
+}
+test $# -eq 1 || usage
+commit=$1
+
+sed -n '/'"$commit"'[^ ]* \([^ ]*\)/ { s//\1/; p; Q }' ~/hg/.hg/git-mapfile

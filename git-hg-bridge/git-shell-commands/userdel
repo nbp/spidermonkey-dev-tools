@@ -1,0 +1,13 @@
+#!/bin/sh
+
+usage() {
+    echo 1>&2 "userdel <login>
+
+This script delete an entry in the authorized keys to remove a user account.
+"
+}
+
+test $# -eq 1 || usage
+user="$1"
+
+sed -i '/'"environment=\"HGUSER=$user\""'/ { d }' ~/.ssh/authorized_keys
