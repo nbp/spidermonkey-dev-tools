@@ -16,16 +16,32 @@ _hg-repositories_ «h1», «h2» and «h3» tips.  «h» is the _hg-bridge_ which is
 used to export and import commits to the _git-bridge_ labeled «g».  «1», «2» and
 «3» are the edge names.
 
-The expected layout is:
+* Bridge Account Layout
 
-  project-bridge/      -- hg-bridge
+A user account is used to hold the bridge taken by multiple people using ssh.
+The layout of the user should be:
+
+~/                       -- user account
+  hg/                    -- hg-bridge
     .hg/
-      bridge/          -- This directory
-      git/             -- git-bridge
+      bridge/            -- (This directory)
+        pull.sh
+        push.sh
+      git/               -- git-bridge
       repos/
-      <edge names>     -- git-repo (g1, g2 and g3)
+        <edge names>     -- git-repo (g1, g2 and g3)
       sync.lock
       sync.lock.<edge names>
+
+  git-shell-commands/    -- commands for the git-shell
+    changeset-to-commit  -- return the commit corresponding to a changeset
+    commit-to-changeset  -- return the changeset corresponding to a commit
+    hg-fetch             -- start fetching all repositories
+    mapfile              -- cat the git-mapfile
+
+  <edge names>.git       -- symbolic link to ~/hg/.hg/repos/<edge name>
+
+* Mercurial Configuration
 
 Edge names are listed inside the hg-bridge configuration file (namely
 project-bridge/.hg/hgrc) and are stored in the path section.
@@ -50,3 +66,26 @@ hg-git) and add the following lines to hg-bridge configuration file.
   [extensions]
   hgext.bookmarks =
   hggit = <path to hg-git>
+
+* Security Concerns
+
+This bridge does not have any knowledge of the rights of each user.  To ensure
+that the user which is pushing has the right to do so, we need to ask mercurial.
+Once mercurial has accepted the changes, we mirror the push in Git by accepting
+the push to the master branch of the git repository.
+
+To enable authentification from mercurial we have to transfer the credentials of
+the user across the connection.  Thus bridge user should accept to forward their
+agent such as it can be used by mercurial servers.
+
+    ~client/.ssh/config
+
+  Host git-hg-mirror.company.name
+  User bridge
+  ForwardAgent yes
+
+Forwarding the agent implies that if not restricted, any bridge user (or root)
+may steal the agent of another.  To avoid this, we isolate each connection to
+the bridge account by using the git-shell.
+
+*** This model is not fully secured yet. ***
