@@ -88,4 +88,37 @@ Forwarding the agent implies that if not restricted, any bridge user (or root)
 may steal the agent of another.  To avoid this, we isolate each connection to
 the bridge account by using the git-shell.
 
+The user name needed to establish a connection to the mercurial repository is
+extarcted by sshd when the connection is established.  The
+~/.ssh/authorized_keys allow to change the environment, and thus to set a
+different environment variable based on the key used for the connection.
+
+    ~/.ssh/authorized_keys
+
+  no-port-forwarding,no-X11-forwarding,environment="HGUSER=foo@company.name" key
+
+This HGUSER name is used in the mercurial configuration file as the login used
+to connect to the remote repository:
+
+    ~/hg/.hg/hgrc
+
+  ...
+
+  [ui]
+  ssh = ssh -l "$HGUSER"
+
+  ...
+
+Pushing to the git-bridge is prevented by setting an environment variable which
+is always at «no» at the beginning of the ssh session and is set to «yes» when
+the update hooks of each edge is going to push to the git-bridge.  git-bridge
+hooks are used to only accept pushes is the user «CAN_CROSS» environment
+variable is set to «yes».  To reset the environment at the beginning of the
+session, you should use ~/.ssh/environment file.
+
+    ~/.ssh/environment
+
+  CAN_CROSS=no
+
+
 *** This model is not fully secured yet. ***

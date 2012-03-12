@@ -59,6 +59,7 @@ echo "Get git repository lock for pushing to the bridge."
 
     # Push from the git-repo to the git-bridge, the config rules are
     # renaming the branch to refs/heads/$edgeName/push (or $edgeName/push bookmark)
+    export CAN_CROSS=yes
     git push origin
 
 # fun: Ensure nobody is crossing the bridge.
