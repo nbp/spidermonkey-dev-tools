@@ -5,8 +5,10 @@ usage() {
 
 This script delete an entry in the authorized keys to remove a user account.
 "
+    exit 1
 }
 
+test "$ADMIN" = yes || exit 2
 test $# -eq 1 || usage
 user="$1"
 

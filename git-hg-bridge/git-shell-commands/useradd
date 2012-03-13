@@ -7,8 +7,10 @@ This script add an entry in the authorized keys to enable a user account. The
 user is the mercurial user used to authenticate the owner of the private key
 against the mercurial server.
 "
+    exit 1
 }
 
+test "$ADMIN" = yes || exit 2
 test $# -eq 2 || usage
 user="$1"
 key="$2"
