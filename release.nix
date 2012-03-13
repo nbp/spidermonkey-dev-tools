@@ -252,7 +252,7 @@ let
 
               if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args 2>&1; then
                   echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
-                  python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
+                  python ${gprof2dot}/gprof2dot.py  -f callgrind -s -o ./$latest-$test.dot $callgrindOutput
                   dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
                   echo "file png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
               fi
@@ -274,7 +274,7 @@ let
 
               if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args 2>&1; then
                   echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
-                  python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
+                  python ${gprof2dot}/gprof2dot.py  -f callgrind -s -o ./$latest-$test.dot $callgrindOutput
                   dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
                   echo "file png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
               fi
@@ -290,7 +290,7 @@ let
 
               if valgrind --smc-check=all-non-file --tool=callgrind --callgrind-out-file=$callgrindOutput -- ${build}/bin/js $args 2>&1; then
                   echo "file callgrind-output $callgrindOutput" >> $out/nix-support/hydra-build-products
-                  python ${gprof2dot}/gprof2dot.py  -f callgrind -o ./$latest-$test.dot $callgrindOutput
+                  python ${gprof2dot}/gprof2dot.py  -f callgrind -s -o ./$latest-$test.dot $callgrindOutput
                   dot -Tpng -o $out/$latest-$test.png ./$latest-$test.dot
                   echo "file png $out/$latest-$test.png" >> $out/nix-support/hydra-build-products
               fi
