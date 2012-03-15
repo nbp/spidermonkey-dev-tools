@@ -67,9 +67,12 @@ echo "Get mercurial repository lock for pushing from the bridge."
 ( flock -x 10;
 
     # Import changes into mercurial.
-    if ! hg gimport; then
+    if hg gimport; then
+        :
+    else
         error=$?
         echo "The bridge collasped, try again once it is repaired. (Exit code $error)"
+        exit $error
     fi
 
     if hg push $force -r $edgeName/push $edgeName; then
@@ -90,6 +93,7 @@ echo "Get mercurial repository lock for pushing from the bridge."
         error=$?
         # fun: Your visa has been refused at the border, update your work status.
         echo "Changes refused by mercurial remote. (Exit code $error)"
+        exit $error
     fi
 
     hg bookmark -d $edgeName/push
