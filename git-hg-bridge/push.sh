@@ -97,8 +97,8 @@ echo "Get mercurial repository lock for pushing from the bridge."
 ) 10> $lockfile
 
     # Push from the git-repo to the git-bridge
-    test $pushOnly = true || \
-        git fetch origin
+    # test $pushOnly = true || \
+    #     git fetch origin
 
 ) 11> $lockfile.$edgeName
 
