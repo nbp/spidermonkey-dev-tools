@@ -66,7 +66,12 @@ echo "Get git repository lock for pushing to the bridge."
 echo "Get mercurial repository lock for pushing from the bridge."
 ( flock -x 10;
 
-    # Import changes into mercurial.
+    echo "Convert changes to mercurial."
+
+    # Delete the bookmark otherwise gimport does not always update the
+    # bookmarks.
+    hg bookmark -d $edgeName/push
+
     if hg gimport; then
         :
     else
