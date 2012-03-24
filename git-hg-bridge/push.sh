@@ -76,7 +76,7 @@ echo "Get mercurial repository lock for pushing from the bridge."
 
     # Delete the bookmark otherwise gimport does not always update the
     # bookmarks.
-    hg bookmark -d $edgeName/push
+    hg bookmark -d $edgeName/push || true
 
     if hg gimport; then
         :
