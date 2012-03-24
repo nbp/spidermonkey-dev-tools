@@ -24,7 +24,7 @@ oldrev=$2
 newrev=$3
 
 if test "$ref" != refs/heads/master; then
-    case "$REFUSE_OTHER_BRANCHES"
+    case "$REFUSE_OTHER_BRANCHES" in
         (0|no) exit 0;;
         (*) exit 1;;
     esac
