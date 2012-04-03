@@ -336,7 +336,8 @@ let
 
           # List of all failing test with the debug output.
           echo -n Report failures
-          sed -n 'x; s,.*,,; x; :beg; /TEST-PASS/ { d }; /TEST-UNEXPECTED/ { G; p; d }; H; n; b beg;' ./log > $out/failures.txt
+          python ${./extract-failures.py} ./log > $out/failures.txt
+
           echo "report fail-log $out/failures.txt" >> $out/nix-support/hydra-build-products
           echo .
 
