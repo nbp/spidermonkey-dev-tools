@@ -282,7 +282,9 @@ let
           cd -
 
           # run v8
-          cd ${v8}
+          cp -r ${v8} ./v8
+          chmod -R u+rw ./v8
+          cd ./v8
           latest=v8
           for test in $(sed -n '/^load/ { /base.js/ d; s/.*(.\(.*\)\.js.).*/\1/; p } ' run.js); do
               args="${jitTestOpt} -f base.js -f $test.js"
