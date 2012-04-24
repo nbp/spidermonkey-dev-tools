@@ -329,12 +329,8 @@ let
           TZ="US/Pacific" \
           TZDIR="${pkgs.glibc}/share/zoneinfo" \
           IONFLAGS=all \
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --ion-tbpl -o --no-slow --timeout=120 ${build}/bin/js ${checkDirs} 2>&1 | tee ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT\|--ion'
+          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f --tbpl -o --no-slow --timeout=120 ${build}/bin/js ${checkDirs} 2>&1 | tee ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT'
 
-          TZ="US/Pacific" \
-          TZDIR="${pkgs.glibc}/share/zoneinfo" \
-          IONFLAGS=all \
-          python ./js/src/jit-test/jit_test.py --no-progress --tinderbox -f -o --no-slow --timeout=120 ${build}/bin/js ${checkDirs} 2>&1 | tee -a ./log | grep 'TEST\|PASS\|FAIL\|TIMEOUT'
 
           # List of all failing test with the debug output.
           echo -n Report failures
