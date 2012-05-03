@@ -323,6 +323,7 @@ let
         name = "ionmonkey-check";
         src = jobs.tarball;
         buildInputs = with pkgs; [ python gnused ];
+        preHook= "set -x";
         dontBuild = true;
         checkPhase = ''
           ensureDir $out
