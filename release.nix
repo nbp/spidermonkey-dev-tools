@@ -63,8 +63,8 @@ let
           stdenv = build.pkgs.stdenvCross;
           src = jobs.tarball;
 
-          buildNativeInputs = with build.pkgs; [ perl python zlib ];
-          # buildInputs = with pkgs; [ gdb ];
+          buildNativeInputs = with build.pkgs; [ perl python ];
+          buildInputs = with pkgs; [ zlib ];
 
           #postUnpack = ''
           #  sourceRoot=$sourceRoot/js/src
