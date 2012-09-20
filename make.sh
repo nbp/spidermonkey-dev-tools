@@ -1,11 +1,17 @@
 #!/bin/sh
 
+export TZ=America/Los_Angeles
+
 arch_sel=
 bld_sel=
 cc_sel=
 phase_sel=
 aphase_sel=
 kontinue=false
+firefox=false
+nspr=false
+oomCheck=false
+threadsafe=true
 arg=$1; shift;
 oldarg=
 while test "$arg" != "$oldarg"; do
@@ -13,9 +19,13 @@ while test "$arg" != "$oldarg"; do
         (x86|x64|arm) arch_sel="$arch_sel ${arg%%-*}";;
         (dbg|opt) bld_sel="$bld_sel ${arg%%-*}";;
         (gcc*) cc_sel="$cc_sel ${arg%%-*}";;
-        (cfg|make|chk|run|runi|chki|chkt|regen) phase_sel="$phase_sel ${arg%%-*}";;
+        (cfg|make|chk|run|runt|runi|chk?|regen) phase_sel="$phase_sel ${arg%%-*}";;
         (patch) aphase_sel="$aphase_sel ${arg%%-*}";;
         (k) kontinue=true;;
+        (ff) firefox=true;;
+        (nspr) nspr=true;;
+        (oom) oomCheck=true;;
+        (nts) threadsafe=false;;
         (*) echo 1>&2 "Unknown variation flag '$arg'.";
         exit 1;;
     esac
@@ -239,7 +249,23 @@ for p in $phase_sel; do
     fi
 done
 
-srcdir=$(get_js_srcdir)
+if $firefox || $nspr ; then
+    srcdir=$(get_srcdir)
+else
+    srcdir=$(get_js_srcdir)
+fi
+
+cd $srcdir
+if test -n "$BRANCH"; then
+    branch=$BRANCH
+elif branch=$(git symbolic-ref HEAD 2>/dev/null); then
+    branch=${branch#*/*/}
+elif branch=$(git rev-parse --short HEAD 2>/dev/null); then
+    :
+else
+    branch=
+fi
+cd -
 
 arch_max=$(echo $arch_sel | wc -w)
 arch_cnt=1
@@ -253,22 +279,28 @@ cc_max=$(echo $cc_sel | wc -w)
 cc_cnt=1
 for cc in $cc_sel; do
 
-    builddir=$srcdir/_build/$arch/$cc/$bld
-    buildtmpl=$HOME/mozilla/_build_tmpl/$arch/$cc/$bld
+    buildspec=$arch/$cc/$bld
+    builddirtop=$srcdir/_build/
+    builddir=$srcdir/_build/${branch+$branch/}$buildspec
+    instdir=$srcdir/_inst/${branch+$branch/}$buildspec
+    shell=$srcdir/_build/js${branch+-$(basename "$branch")}-$bld-$arch-$cc
+    buildtmpl=$HOME/mozilla/_build_tmpl/$buildspec
     oldarch=$arch
     test $arch = arm && arch=x64
     gen_builddir
 
     clean_env
     load_local_env "$builddir"
+    export NIX_STRIP_DEBUG=0
     arch=$oldarch
 
     test -e "$builddir" || mkdir -p "$builddir"
+    touch "$builddir/config.sum"
     phase_sel_case="$phase_sel"
 
-    if test "$(md5sum "$srcdir/configure.in")" != "$(cat "$builddir/config.sum")"; then
+    if test "$(md5sum "$srcdir/configure.in" | sed 's/ .*//')" != "$(cat "$builddirtop/config.sum")"; then
         phase_sel_case="autoconf cfg $phase_sel_case"
-    elif test \! -e "$builddir/Makefile" -a "${phase_sel_case%make*}" == "${phase_sel_case#*make}"; then
+    elif test "$(cat "$builddir/config.sum")" != "$(cat "$builddirtop/config.sum")"; then
         phase_sel_case="cfg $phase_sel_case"
     fi
 
@@ -279,17 +311,52 @@ for phase in $phase_sel_case; do
             # does that once for all builds.
             cd $srcdir;
             run autoconf
-            cd -
-            cd $builddir;
-            md5sum "$srcdir/configure.in" > config.sum
+            md5sum "$srcdir/configure.in" | sed 's/ .*//' > "$builddirtop/config.sum"
             cd -
             ;;
         (cfg)
             conf_args=
-            case $bld in
-                (dbg) conf_args="$conf_args --enable-debug --disable-optimize";;
-            esac
+            conf_args="$conf_args  --prefix=$instdir"
+            if $firefox ; then
+                conf_args="$conf_args --enable-application=browser" # --with-system-jpeg --with-system-zlib --with-system-bz2 --disable-crashreporter --disable-necko-wifi --disable-installer --disable-updater"
+            elif $nspr ; then
+                conf_args="$conf_args"
+            else
+                conf_args="$conf_args --enable-valgrind"
+            fi
+
+            if $oomCheck; then
+                conf_args="$conf_args --enable-oom-backtrace"
+            fi
+
+            if $nspr ; then
+                case $bld in
+                    (dbg) conf_args="$conf_args --enable-debug=-ggdb3 --disable-optimize";;
+                    (opt) conf_args="$conf_args --enable-optimize --disable-debug";;
+                esac
+            else
+                # Thread safeness, to avoid silly compression times.
+                if ! $firefox; then
+                    if $threadsafe ; then
+                        conf_args="$conf_args --enable-threadsafe --with-system-nspr --with-nspr-prefix=$(top_file "nsprpub" $srcdir)/_inst/mc/$buildspec"
+                    else
+                        conf_args="$conf_args --disable-threadsafe"
+                    fi
+                fi
+
+                case $bld in
+                    (dbg) conf_args="$conf_args --enable-debug=-ggdb3 --enable-debug-symbols --disable-elf-hack --disable-optimize";;
+                    (opt) conf_args="$conf_args --enable-optimize --disable-debug --enable-debug-symbols=-ggdb3";; #  --enable-profiling";;
+                esac
+            fi
+
             case $arch in
+                (x64)
+                  ## We need this for nspr to avoid looking for stubs-32.h of
+                  ## the glibc.
+                  if $nspr ; then
+                      conf_args="$conf_args --enable-64bit"
+                  fi;;
                 (x86) conf_args="$conf_args i686-unknown-linux-gnu";;
                 (arm) conf_args="$conf_args armv7l-unknown-linux-gnueabi"
                 continue;;
@@ -299,58 +366,122 @@ for phase in $phase_sel_case; do
             cd $builddir;
             run "$srcdir/configure" $conf_args
             cd -
+            cp "$builddirtop/config.sum" "$builddir/config.sum"
             ;;
 
         (make)
             case $arch in
                 (arm)
+                    export PATH=$PATH:$HOME/.nix-profile/bin
+                    archive="$builddir/src.tgz"
+                    run echo "git-archive ..."
+                    git archive -o "$archive" --prefix=src/ --remote "$srcdir/../../" HEAD || exit 1
                     case $bld in
                         (dbg)
-                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsBuild -o "$builddir/result"
+                            attr=jsBuild
                             ;;
                         (opt)
-                            run nix-build -I /home/nicolas/mozilla /home/nicolas/mozilla/sync-repos/release.nix -A jsOptBuild -o "$builddir/result"
+                            attr=jsOptBuild
                             ;;
                     esac
-                    ln -sf "$builddir/result/bin/js" "$builddir/js"
+                    run echo "nix-instantiate ..."
+                    drv=$(echo '(import /home/nicolas/mozilla/sync-repos/release.nix { ionmonkeySrc = '"$builddir/src.tgz"'; }).'"$attr"' { system = "armv7l-linux"; }' | nix-instantiate -I /home/nicolas/mozilla - || exit 2)
+                    run echo "nix-store -r ..."
+                    store=$(nix-store -r $drv || exit 3)
+                    ln -sf $store "$builddir/result"
+                    run ln -sf "$builddir/result/bin/js" "$builddir/js"
                     ;;
                 (*)
-                    LC_ALL=C run make -C $srcdir/_build/$arch/$cc/$bld "$@"
+                    LC_ALL=C run make -C "$builddir" "$@"
                     ;;
             esac
+
+            if $firefox || $nspr; then
+                LC_ALL=C run make -C "$builddir" install "$@"
+            else
+                ln -sf  "$builddir/js" "$shell"
+            fi
             ;;
 
         (chk)
-            LC_ALL=C run make -C $srcdir/_build/$arch/$cc/$bld check "$@"
+            LC_ALL=C run make -C "$builddir" check "$@"
             ;;
 
         (chki)
             # check ion test directory.
-            #LC_ALL=C run make -C $srcdir/_build/$arch/$cc/$bld check-ion-test "$@"
-            run python $srcdir/jit-test/jit_test.py --ion-tbpl --no-slow $srcdir/_build/$arch/$cc/$bld/js ion
+            #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
+            run python $srcdir/jit-test/jit_test.py --ion-tbpl --no-slow "$shell" ion
+            ;;
+
+        (chka)
+            # check ion test directory.
+            #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
+            chkaOpt=""
+            if test -e $srcdir/ion/x86; then
+                chkaOpt="$chkaOpt --ion"
+            fi
+            kontinue_save=$kontinue
+            kontinue=true
+
+            if $firefox ; then
+                # TEST_PATH='/tests/MochiKit-1.4.2/tests/test_MochiKit-Style.html' EXTRA_TEST_ARGS='--debugger=gdb' make mochitest-plain
+                LC_ALL=C run make -C "$builddir" mochitest-plain
+            else
+                run python $srcdir/tests/jstests.py -t 10 $(readlink "$shell")
+                run python $srcdir/jit-test/jit_test.py $chkaOpt --no-slow "$shell"
+            fi
+
+            kontinue=$kontinue_save
             ;;
 
         (chkt)
-            run python $srcdir/jit-test/jit_test.py --ion -s -o $srcdir/_build/$arch/$cc/$bld/js "$@"
+            run python $srcdir/jit-test/jit_test.py --ion -s -o "$shell" "$@"
             ;;
 
         (run)
-            run $srcdir/_build/$arch/$cc/$bld/js "$@"
+            if $firefox ; then
+              run "$builddir/dist/bin/firefox" "$@"
+            else
+              run "$shell" "$@"
+            fi
+            ;;
+
+        (runt)
+            args=""
+            tests=""
+            debug=""
+            for i in $@; do
+                case "$i" in
+                    (-g) debug="-g";;
+                    (-*) args="$args $i";;
+                    (*) tests="$tests $i";;
+                esac
+            done
+            run python $srcdir/jit-test/jit_test.py -w /dev/null --no-progress --write-failure-output -o --jitflags="" --args="$args" "$shell" $tests $debug
             ;;
 
         (runi)
             phase="runi interp"
-            run $srcdir/_build/$arch/$cc/$bld/js "$@"
+            run "$shell" "$@"
             failed=false
             kontinue_save=$kontinue
             kontinue=true
             empty_opt=
-            for mode in eager infer none; do
+            for mode in none eager; do
                 mode_opt=$empty_opt
-                test $mode = eager && mode_opt="$mode_opt --ion-eager"
-                test $mode = infer && mode_opt="$mode_opt -n"
+                test $mode = infer && mode_opt="$mode_opt"
+                test $mode = eaginf && mode_opt="$mode_opt --ion-eager"
+            for jmmode in none enabled eager; do
+                jmmode_opt=$mode_opt
+                test $jmmode = none && jmmode_opt="$jmmode_opt --no-jm"
+                test $jmmode = enabled && jmmode_opt="$jmmode_opt"
+                test $jmmode = eager && jmmode_opt="$jmmode_opt -a"
+            for timode in with without; do
+                timode_opt=$jmmode_opt
+                test $timode = with && timode_opt="$timode_opt"
+                test $timode = without && timode_opt="$timode_opt --no-ti"
             for gvn in off pessimistic optimistic; do
-                gvn_opt=$mode_opt
+                gvn_opt=$timode_opt
                 test $gvn != optimistic && gvn_opt="$gvn_opt --ion-gvn=$gvn"
             for licm in off on; do
                 licm_opt=$gvn_opt
@@ -367,8 +498,10 @@ for phase in $phase_sel_case; do
 
             opt=$osr_opt
             phase="runi ion mode=$mode gvn=$gvn licm=$licm regalloc=$ra inlining=$inline osr=$osr"
-            run $srcdir/_build/$arch/$cc/$bld/js --ion $opt "$@"
+            run "$shell" $opt "$@"
 
+            done
+            done
             done
             done
             done
