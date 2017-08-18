@@ -29,7 +29,7 @@ let
           type = with types; listOf package;
         };
         pkgs = mkOption {
-          type = with types; attrsOf inferred;
+          type = with types; attrsOf package;
         };
         result = mkOption {
           type = with types; package;
@@ -105,6 +105,11 @@ let
   };
 
   gccVariations = {
+    gcc47 = {config, ...}: {
+      key = "gcc47";
+      name = "-gcc47";
+      gcc = config.pkgs.gcc47;
+    };
     gcc46 = {config, ...}: {
       key = "gcc46";
       name = "-gcc46";
@@ -164,12 +169,14 @@ let
           gnome.libgnome gnome.libgnomecanvas gnome.libgnomeui xlibs.libICE
           gnome.libIDL libnih libnotify libpng xlibs.libSM libsmbios libusb
           xlibs.libX11 xlibs.libXau xlibs.libxcb xlibs.libXdmcp xlibs.libXext
-          libxml2 libxslt xlibs.libXt libyaml man mercurial mesa /*nspr*/ nss
-          gnome.ORBit2 ortp gtkLibs.pango pciutils pcre perl pkgconfig
-          /*pmutils*/ policykit popt postfix xlibs.printproto procps python27
-          docutils pythonPackages.pyyaml xlibs.renderproto /*rlwrap*/ /*rsync*/
-          socat sqlite /*strace*/ time udev /*usbutils*/ wget which
+          libxml2 libxslt xlibs.libXt xlibs.libxkbfile libyaml man mercurial
+          mesa /*nspr*/ nss gnome.ORBit2 ortp gtkLibs.pango pciutils pcre perl
+          pkgconfig /*pmutils*/ policykit popt postfix xlibs.printproto procps
+          python27 docutils pythonPackages.pyyaml xlibs.renderproto /*rlwrap*/
+          /*rsync*/ socat sqlite /*strace*/ time udev /*usbutils*/ wget which
           xlibs.xextproto xlibs.xproto yasm
+
+          gstreamer
 
           /* Needed by the browser */
           alsaLib
