@@ -138,7 +138,7 @@ catch_failure() {
 
 maybeExport() {
     local name=$1
-    test -v $name && echo "export $name='$(eval echo \$$name)'";
+    test -v $name && echo "export $name='$(eval echo \$$name)';";
 }
 
 maybeExportPrefix() {
@@ -168,7 +168,7 @@ run() {
         else
             archAttr=i686-linux
         fi
-        command="
+        hook="
           export NIX_GCC_WRAPPER_EXEC_HOOK='$(top_file "rewrite-rpath-link.sh" $buildtmpl)';
           export NIX_CC_WRAPPER_EXEC_HOOK='$(top_file "rewrite-rpath-link.sh" $buildtmpl)';
           $(maybeExport MOZBUILD_STATE_PATH)
@@ -193,8 +193,8 @@ run() {
           export IN_MAKE_SH=true;
           $(maybeExport IN_EMACS)
           export SHELL;
-          $(echo "$@")
         "
+        command="$(echo "$@")"
         pure="--pure"
         if $fhs; then
             fhsAttr=".fhs.env"
@@ -204,7 +204,8 @@ run() {
             fhsAttr=""
         fi
         # MOZ_LOG  MOZ_GDB_SLEEP
-        $NIX_SHELL "$RELEASE_NIX" -A "gecko.$archAttr.$cc$fhsAttr" $pure --command "$command"
+        NIX_SHELL_HOOK="$hook" \
+          $NIX_SHELL "$RELEASE_NIX" -A "gecko.$archAttr.$cc$fhsAttr" $pure --command "$command"
     elif test -z "$TS"; then
         "$@"
     else
