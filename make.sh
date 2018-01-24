@@ -247,7 +247,7 @@ generate_patch() {
 
 gen_builddir() {
     local arch="$arch"
-    if test \! -e "$builddir/../config.site"; then
+    if test \! -e "$builddir/../config.site" -a -e "$buildtmpl"; then
         mkdir -p "$builddir"
         cd "$builddir/.."
         # cp $(top_file ".init" $buildtmpl) .
