@@ -155,6 +155,10 @@ run() {
         echo -e 1>&2 "${TS:+wait-&-}exec: ${highlight}$@${reset}"
     fi
 
+    # mach try to parse the environment, and the fact that these are present cause troubles.
+    unset shellHook;
+    unset configurePhase;
+
     if $IN_MAKE_SH ; then
         eval "$@"
     elif $nix ; then
@@ -344,9 +348,13 @@ generate_conf_args() {
         if ! $firefox; then
             conf_args="$conf_args --with-system-nspr --with-nspr-prefix=$topinstdir/nsprpub/master/$nsprbuildspec"
         else
-            clang=$(which clang)
-            libclang=$(find $(cat $(dirname $clang)/../nix-support/propagated-user-env-packages) -name libclang.so | head -n1)
-            conf_args="$conf_args --with-libclang-path=$(dirname $libclang) --with-clang-path=$clang"
+            #### Clang and BINDGEN_CFLAGS are taken from genMozConfig function
+            #### provided by the shell hook.
+            :;
+
+            # clang=$(which clang)
+            # libclang=$(find $(cat $(dirname $clang)/../nix-support/propagated-user-env-packages) -name libclang.so | head -n1)
+            # conf_args="$conf_args --with-libclang-path=$(dirname $libclang) --with-clang-path=$clang"
         fi
         # conf_args="$conf_args --disable-intl-api --without-intl-api"
 
@@ -613,13 +621,17 @@ for phase in $phase_sel_case; do
             ;;
 
         (machcfg)
+            echo "Generate MOZCONFIG: $MOZCONFIG"
             cat >$MOZCONFIG <<EOF
 # Do not source automation scripts, but read them to reverse engineer options
 # that we want.
 # . "\$topsrcdir/build/mozconfig.common"
 
+# Content of \$MOZCONFIG_TEMPLATE provided by the shellHook of the derivation.
+$(cat $MOZCONFIG_TEMPLATE)
+
+# Content produced by make.sh generate_conf_args function
 mk_add_options MOZ_OBJDIR=$builddir
-mk_add_options AUTOCONF=$AUTOCONF
 mk_add_options AUTOCLOBBER=1
 $(for opt in $(generate_conf_args); do
    echo "ac_add_options $opt";
