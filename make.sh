@@ -27,6 +27,10 @@ thm=false
 ggc=false
 cgc=false
 asan=false
+ubsan=false
+msan=false
+tsan=false
+spew=true
 fuzz=false
 noion=false
 logref=false
@@ -68,6 +72,10 @@ while test "$arg" != "$oldarg"; do
         (ggc) ggc=true;;
         (cgc) cgc=true;;
         (asan) asan=true;;
+        (ubsan) ubsan=true;;
+        (msan) msan=true;;
+        (tsan) tsan=true;;
+        (nospew) spew=false;;
         (fuzz) fuzz=true;;
         (noion) noion=true;;
         (nowarn) warning=false;;
@@ -345,6 +353,19 @@ generate_conf_args() {
 
     if $asan; then
         conf_args="$conf_args --enable-address-sanitizer"
+    fi
+    if $ubsan; then
+        conf_args="$conf_args --enable-address-sanitizer"
+    fi
+    if $msan; then
+        conf_args="$conf_args --enable-memory-sanitizer"
+    fi
+    if $tsan; then
+        conf_args="$conf_args --enable-thread-sanitizer"
+    fi
+
+    if $spew; then
+        conf_args="$conf_args --enable-jitspew"
     fi
 
     if $noion; then
@@ -675,6 +696,11 @@ EOF
         (make)
             if test -z "$args"; then
                 args="-skj8";
+            fi
+            if $ubsan; then
+                SANFLAGS=bool,bounds,vla-bound
+                export CXXFLAGS="-fsanitize=$SANFLAGS -fno-sanitize-recover=$SANFLAGS"
+                export CFLAGS="-fsanitize=$SANFLAGS -fno-sanitize-recover=$SANFLAGS"
             fi
             case $arch in
                 # (arm)
