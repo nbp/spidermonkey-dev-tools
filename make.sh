@@ -39,9 +39,12 @@ badexitcode=
 nix=true
 fhs=false
 arg=$1; shift;
-first_arg=$arg
 oldarg=
+# Record if this is a nix-shel context, otherwise this is a task argument.
+ctx_p=false
+task=""
 while test "$arg" != "$oldarg"; do
+    ctx_p=false;
     case ${arg%%-*} in
         (x86|x64|arm|arm64|mips|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}";;
         (dbg|opt|oopt) bld_sel="$bld_sel ${arg%%-*}";;
@@ -77,6 +80,9 @@ while test "$arg" != "$oldarg"; do
         (*) echo 1>&2 "Unknown variation flag '$arg'.";
         exit 1;;
     esac
+    if test $ctx_p = false; then
+        task=${task}${task:+-}${arg%%-*}
+    fi
     oldarg=$arg
     arg=${arg#*-}
 done
@@ -172,6 +178,7 @@ run() {
           export NIX_GCC_WRAPPER_EXEC_HOOK='$(top_file "rewrite-rpath-link.sh" $buildtmpl)';
           export NIX_CC_WRAPPER_EXEC_HOOK='$(top_file "rewrite-rpath-link.sh" $buildtmpl)';
           $(maybeExport MOZBUILD_STATE_PATH)
+          export MOZCONFIG_TEMPLATE=\$MOZCONFIG;
           $(maybeExport MOZCONFIG)
           $(maybeExport LC_ALL)
           $(maybeExport TZ)
@@ -193,7 +200,12 @@ run() {
           export IN_MAKE_SH=true;
           $(maybeExport IN_EMACS)
           export SHELL;
+          $(maybeExport LD_LIBRARY_PATH)
+          cd $PWD;
         "
+        # Note: "cd $PWD;" is resolved with the path before the nix-shell, while
+        # the path set before running the nix-shell command is used for the
+        # shell hook.
         command="$(echo "$@")"
         pure="--pure"
         if $fhs; then
@@ -204,8 +216,12 @@ run() {
             fhsAttr=""
         fi
         # MOZ_LOG  MOZ_GDB_SLEEP
+        cd $topsrcdir;
         NIX_SHELL_HOOK="$hook" \
-          $NIX_SHELL "$RELEASE_NIX" -A "gecko.$archAttr.$cc$fhsAttr" $pure --command "$command"
+                      $NIX_SHELL "$RELEASE_NIX" \
+                      -A "gecko.$archAttr.$cc$fhsAttr" \
+                      $pure --command "$command"
+        cd -
     elif test -z "$TS"; then
         "$@"
     else
@@ -539,14 +555,15 @@ for cc in $cc_sel; do
         nativeArch=x64
     fi
 
+    export LD_LIBRARY_PATH=$builddir/dist/bin
     export NIX_STRIP_DEBUG=0
     # arch=$oldarch
 
     ## Recurse in make.sh such that we can run the configure phase and all other
     ## commands in the nix-shell.
     if ! $IN_MAKE_SH; then
-        SILENT=true;
-        run $0 $first_arg "$@";
+        # SILENT=true;
+        run $0 $arch-$cc-$task "$@";
         continue;
     fi
 
@@ -556,7 +573,7 @@ for cc in $cc_sel; do
     #export CXX;
 
     test -e "$builddir" || mkdir -p "$builddir"
-    touch $builddir/config.sum
+    touch $configsum
     rm -f $builddir/.src || ln -sf $srcdir $builddir/.src
     phase_sel_case="$phase_sel"
 
@@ -582,7 +599,7 @@ for cc in $cc_sel; do
     config_in=$srcdir/old-configure.in
     test -e $config_in || config_in=$srcdir/configure.in
     if $checkConfig ; then
-        if test "$(md5sum "$config_in" | sed 's/ .*//')" != "$(cat "$configsum")"; then
+        if test "$(md5sum "$config_in" | sed 's/ .*//')" != "$(cat "$configsum")" -o \! -x $srcdir/configure; then
             phase_sel_case="autoconf cfg $phase_sel_case"
         elif test "$(cat "$builddir/config.sum")" != "$(cat "$configsum")"; then
             phase_sel_case="cfg $phase_sel_case"
@@ -616,6 +633,7 @@ for phase in $phase_sel_case; do
             conf_args=$(generate_conf_args)
             phase="configure"
             cd $builddir;
+            # export HOST_LDFLAGS="-rpath $builddir/dist/bin"
             run "$srcdir/configure" $conf_args
             cd -
             cp "$configsum" "$builddir/config.sum"
