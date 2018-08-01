@@ -201,7 +201,7 @@ run() {
           $(maybeExport TLLOG)
           $(maybeExport XRE_NO_WINDOWS_CRASH_DIALOG)
           $(maybeExportPrefix MOZ_)
-          $(maybeExportPrefix JIT_OPTION_)
+          $(maybeExportPrefix JIT_)
           $(maybeExportPrefix BP_)
           $(maybeExportPrefix XPCOM_)
           export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt;
