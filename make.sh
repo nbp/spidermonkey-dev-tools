@@ -50,9 +50,9 @@ task=""
 while test "$arg" != "$oldarg"; do
     ctx_p=false;
     case ${arg%%-*} in
-        (x86|x64|arm|arm64|mips|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}";;
-        (dbg|opt|oopt) bld_sel="$bld_sel ${arg%%-*}";;
-        (gcc*|clang*) cc_sel="$cc_sel ${arg%%-*}";;
+        (x86|x64|arm|arm64|mips|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}"; ctx_p=true;;
+        (dbg|pro|opt|oopt) bld_sel="$bld_sel ${arg%%-*}";;
+        (gcc*|clang*) cc_sel="$cc_sel ${arg%%-*}"; ctx_p=true;;
         (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber)
             last="${arg%%-*}";
             phase_sel="$phase_sel $last";;
@@ -96,7 +96,7 @@ while test "$arg" != "$oldarg"; do
 done
 
 test -z "$arch_sel" && arch_sel="x64"
-test -z "$bld_sel" && bld_sel="dbg"
+test -z "$bld_sel" && bld_sel="pro"
 test -z "$cc_sel" && cc_sel="clang"
 test -z "$phase_sel" && phase_sel="make"
 phase_sel="$phase_sel $aphase_sel"
@@ -303,11 +303,13 @@ generate_conf_args() {
 
     if $firefox ; then
         conf_args="$conf_args --enable-application=browser" # --with-system-jpeg --with-system-zlib --with-system-bz2 --disable-crashreporter --disable-necko-wifi --disable-installer --disable-updater"
-        conf_args="$conf_args --enable-valgrind --disable-jemalloc --disable-install-strip"
+        # conf_args="$conf_args --enable-valgrind"
+        conf_args="$conf_args --disable-jemalloc --disable-install-strip"
     elif $nspr ; then
         conf_args="$conf_args"
     else
-        conf_args="$conf_args --enable-valgrind --disable-jemalloc"
+        conf_args="$conf_args --enable-valgrind"
+        conf_args="$conf_args --disable-jemalloc"
     fi
 
     if $firefox || $nspr; then
@@ -379,12 +381,14 @@ generate_conf_args() {
     if $nspr ; then
         case $bld in
             (dbg) conf_args="$conf_args --enable-debug=-ggdb3 --disable-optimize";;
+            (pro) conf_args="$conf_args --enable-debug=-ggdb3 --enable-optimize";;
             (opt|oopt) conf_args="$conf_args --enable-optimize --disable-debug";;
         esac
     else
         # Thread safeness, to avoid silly compression times.
         if ! $firefox; then
-            conf_args="$conf_args --with-system-nspr --with-nspr-prefix=$topinstdir/nsprpub/master/$nsprbuildspec"
+            # conf_args="$conf_args --with-system-nspr --with-nspr-prefix=$topinstdir/nsprpub/master/$nsprbuildspec"
+            conf_args="$conf_args --enable-nspr-build"
         else
             #### Clang and BINDGEN_CFLAGS are taken from genMozConfig function
             #### provided by the shell hook.
@@ -399,8 +403,9 @@ generate_conf_args() {
         case $bld in
             (dbg) conf_args="$conf_args --enable-debug --disable-optimize --enable-profiling --enable-ctypes --enable-oom-breakpoint";;
             # (dbg) conf_args="$conf_args --enable-debug=-ggdb3 --disable-optimize --enable-profiling --enable-ctypes";;
+            (pro) conf_args="$conf_args --enable-debug --enable-optimize --enable-profiling --enable-ctypes --enable-oom-breakpoint";;
             (opt)
-                conf_args="$conf_args --enable-optimize --enable-jitspew --enable-profiling  --enable-ctypes --enable-official-branding --enable-oom-breakpoint"
+                conf_args="$conf_args --enable-optimize --enable-profiling  --enable-ctypes --enable-official-branding --enable-oom-breakpoint"
                 if $enabledbg ; then
                     conf_args="$conf_args --enable-debug=-ggdb3"
                 else
