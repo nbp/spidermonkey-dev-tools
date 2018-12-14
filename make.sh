@@ -694,7 +694,7 @@ EOF
         (chki)
             # check ion test directory.
             #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
-            run python2 $srcdir/jit-test/jit_test.py --ion-tbpl --no-slow "$shell" ion
+            run python2 $srcdir/jit-test/jit_test.py --ion --no-slow "$shell" ion
             ;;
 
         (chka)
