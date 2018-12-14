@@ -182,8 +182,13 @@ run() {
         # echo -e 1>&2 "${TS:+wait-&-}enter nix-shell:${reset}"
         if test $nativeArch = x64; then
             archAttr=x86_64-linux
-        else
+        elif test $nativeArch = x86; then
             archAttr=i686-linux
+        elif test $nativeArch = aarch64; then
+            archAttr=aarch64-linux
+        else
+            echo 1>&2 "Unknown nativeArch ($nativeArch)"
+            exit 1
         fi
         hook="
           export NIX_GCC_WRAPPER_EXEC_HOOK='$(top_file "rewrite-rpath-link.sh" $buildtmpl)';
@@ -322,6 +327,7 @@ generate_conf_args() {
         opt=$(cond "test $bld = opt")
         oopt=$(cond "test $bld = oopt")
     fi
+    machine=$(uname -m)
     case $arch in
         (x86|arm|mips|mips32|none32) is32b=true;;
         (*) is32b=false;;
@@ -342,7 +348,7 @@ $(cond "$firefox") --enable-js-shell
 $(cond "$firefox || $shell") --disable-jemalloc
 $(cond "$firefox || $shell") --enable-valgrind
 $(for extra in $NIX_EXTRA_CONFIGURE_ARGS; do
-    echo "$(cond "$fuzz || $shell") $extra"
+    echo "$(cond "($fuzz || $shell) && test $machine = x86_64") $extra"
 done)
 # conf_args="$conf_args --disable-gstreamer --disable-pulseaudio"
 $(cond "$firefox || $nspr") --disable-pulseaudio
@@ -381,10 +387,10 @@ $(cond "$wtest") --enable-tests
 $(cond "! $wtest") --disable-tests
 
 $(cond "$nspr && test $arch = x64") --enable-64bit
-$(cond "$is32b") --host=i686-unknown-linux-gnu
-$(cond "$is32b") --target=i686-unknown-linux-gnu
-$(cond "test $arch = arm") --enable-simulator=arm
-$(cond "test $arch = arm64") --enable-simulator=arm64
+$(cond "$is32b -a $machine = x86_64") --host=i686-unknown-linux-gnu
+$(cond "$is32b -a $machine = x86_64") --target=i686-unknown-linux-gnu
+$(cond "test $arch = arm -a $machine = x86_64") --enable-simulator=arm
+$(cond "test $arch = arm64 -a $machine = x86_64") --enable-simulator=arm64
 $(cond "test $arch = mips") --enable-simulator=mips
 $(cond "test $arch = mips32") --enable-simulator=mips32
 $(cond "test $arch = none") --disable-ion
@@ -393,7 +399,7 @@ $(cond "test $arch = none32") --disable-ion
 
 # Generate a compile_commands.json file in addition to the usual makefiles.
 # see https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/Build_Documentation#Developer_(debug)_build
-$(cond "$shell") --enable-build-backends=CompileDB,FasterMake,RecursiveMake
+$(cond "$shell && test $machine = x86_64") --enable-build-backends=CompileDB,FasterMake,RecursiveMake
 EOF
 }
 
@@ -500,11 +506,17 @@ for cc in $cc_sel; do
 
     # Handle emulated architectures.
     nativeArch=$arch
-    if test $arch = "arm" -o $arch = "mips" -o $arch = "mips32" -o $arch = "none32"; then
-        nativeArch=x86
-    elif test $arch = "arm64" -o $arch = "none"; then
-        nativeArch=x64
-    fi
+    case $(uname -m) in
+        (x86_64)
+            if test $arch = "arm" -o $arch = "mips" -o $arch = "mips32" -o $arch = "none32"; then
+                nativeArch=x86
+            elif test $arch = "arm64" -o $arch = "none"; then
+                nativeArch=x64
+            fi;;
+        (aarch64)
+            nativeArch=aarch64
+            ;;
+    esac
 
     export LD_LIBRARY_PATH=$builddir/dist/bin
     export NIX_STRIP_DEBUG=0
