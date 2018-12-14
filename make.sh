@@ -42,6 +42,7 @@ bisect=
 badexitcode=
 nix=true
 fhs=false
+impure=false
 arg=$1; shift;
 oldarg=
 # Record if this is a nix-shel context, otherwise this is a task argument.
@@ -51,7 +52,7 @@ while test "$arg" != "$oldarg"; do
     ctx_p=false;
     case ${arg%%-*} in
         (x86|x64|arm|arm64|mips|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}"; ctx_p=true;;
-        (dbg|pro|opt|oopt) bld_sel="$bld_sel ${arg%%-*}";;
+        (dbg|odbg|pro|opt|oopt) bld_sel="$bld_sel ${arg%%-*}"; ctx_p=true;;
         (gcc*|clang*) cc_sel="$cc_sel ${arg%%-*}"; ctx_p=true;;
         (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber)
             last="${arg%%-*}";
@@ -79,9 +80,11 @@ while test "$arg" != "$oldarg"; do
         (fuzz) fuzz=true;;
         (noion) noion=true;;
         (nowarn) warning=false;;
+        (perf) perf=true;;
         (wtest) wtest=true;;
         (thm) thm=true;;
         (logref) logref=true;;
+        (impure) impure=true;;
         (bisect_segv_run) bisect=run; badexitcode=139; last=run; phase_sel="$phase_sel $last";;
         (bisect_trap_run) bisect=run; badexitcode=133; last=run; phase_sel="$phase_sel $last";;
         (bisect_success_run) bisect=run; badexitcode=0; last=run; phase_sel="$phase_sel $last";;
@@ -209,6 +212,7 @@ run() {
           $(maybeExport IN_EMACS)
           export SHELL;
           $(maybeExport LD_LIBRARY_PATH)
+          $(maybeExport RUSTFLAGS)
           cd $PWD;
         "
         # Note: "cd $PWD;" is resolved with the path before the nix-shell, while
@@ -222,6 +226,9 @@ run() {
             echo $command
         else
             fhsAttr=""
+        fi
+        if $impure; then
+            pure=""
         fi
         # MOZ_LOG  MOZ_GDB_SLEEP
         cd $topsrcdir;
@@ -293,183 +300,101 @@ get_js_srcdir() {
     echo ${source}/js/src
 }
 
+cond() {
+    eval "($1) && echo true || echo false"
+}
+
 generate_conf_args() {
-    conf_args=
-    conf_args="$conf_args  --prefix=$instdir"
-    if $fuzz ; then
-        echo "$conf_args --with-system-nspr --with-nspr-prefix=/home/nicolas/mozilla/_inst/nsprpub/master/x86/clang/dbg  --enable-more-deterministic --enable-debug --disable-optimize --enable-gczeal --enable-debug-symbols --disable-tests --host=i686-unknown-linux-gnu --target=i686-unknown-linux-gnu"
-        return
-    fi
-
-    if $firefox ; then
-        conf_args="$conf_args --enable-application=browser" # --with-system-jpeg --with-system-zlib --with-system-bz2 --disable-crashreporter --disable-necko-wifi --disable-installer --disable-updater"
-        # conf_args="$conf_args --enable-valgrind"
-        conf_args="$conf_args --disable-jemalloc --disable-install-strip"
-    elif $nspr ; then
-        conf_args="$conf_args"
+    shell=$(cond "! $firefox && ! $nspr")
+    if $fuzz; then
+        firefox=false;
+        nspr=false;
+        shell=false;
+        dbg=false
+        pro=false
+        odbg=false
+        opt=false
+        oopt=false
     else
-        conf_args="$conf_args --enable-valgrind"
-        conf_args="$conf_args --disable-jemalloc"
+        dbg=$(cond "test $bld = dbg")
+        pro=$(cond "test $bld = pro")
+        odbg=$(cond "test $bld = odbg")
+        opt=$(cond "test $bld = opt")
+        oopt=$(cond "test $bld = oopt")
     fi
-
-    if $firefox || $nspr; then
-        # conf_args="$conf_args --disable-gstreamer --disable-pulseaudio"
-        conf_args="$conf_args --disable-pulseaudio"
-    fi
-
-    if $firefox; then
-        conf_args="$conf_args --enable-js-shell"
-    fi
-
-    if $oomCheck; then
-        conf_args="$conf_args --enable-oom-backtrace"
-    fi
-
-    if $deterministic; then
-        conf_args="$conf_args --enable-more-deterministic"
-    fi
-
-    if $gczeal; then
-        conf_args="$conf_args --enable-gczeal"
-    fi
-
-    if $tracelog; then
-        conf_args="$conf_args --enable-trace-logging"
-    fi
-
-    if $thm; then
-        conf_args="$conf_args --enable-thm"
-    fi
-
-    if $ggc; then
-        conf_args="$conf_args --enable-exact-rooting"
-    fi
-
-    if $ggc; then
-        conf_args="$conf_args --enable-gcgenerational"
-    fi
-
-    if $cgc; then
-        conf_args="$conf_args --enable-gccompacting"
-    fi
-
-    if $asan; then
-        conf_args="$conf_args --enable-address-sanitizer"
-    fi
-    if $ubsan; then
-        conf_args="$conf_args --enable-address-sanitizer"
-    fi
-    if $msan; then
-        conf_args="$conf_args --enable-memory-sanitizer"
-    fi
-    if $tsan; then
-        conf_args="$conf_args --enable-thread-sanitizer"
-    fi
-
-    if $spew; then
-        conf_args="$conf_args --enable-jitspew"
-    fi
-
-    if $noion; then
-        conf_args="$conf_args --disable-ion"
-    fi
-
-    if $logref; then
-        conf_args="$conf_args --enable-logrefcnt"
-    fi
-
-    if $nspr ; then
-        case $bld in
-            (dbg) conf_args="$conf_args --enable-debug=-ggdb3 --disable-optimize";;
-            (pro) conf_args="$conf_args --enable-debug=-ggdb3 --enable-optimize";;
-            (opt|oopt) conf_args="$conf_args --enable-optimize --disable-debug";;
-        esac
-    else
-        # Thread safeness, to avoid silly compression times.
-        if ! $firefox; then
-            # conf_args="$conf_args --with-system-nspr --with-nspr-prefix=$topinstdir/nsprpub/master/$nsprbuildspec"
-            conf_args="$conf_args --enable-nspr-build"
-        else
-            #### Clang and BINDGEN_CFLAGS are taken from genMozConfig function
-            #### provided by the shell hook.
-            :;
-
-            # clang=$(which clang)
-            # libclang=$(find $(cat $(dirname $clang)/../nix-support/propagated-user-env-packages) -name libclang.so | head -n1)
-            # conf_args="$conf_args --with-libclang-path=$(dirname $libclang) --with-clang-path=$clang"
-        fi
-        # conf_args="$conf_args --disable-intl-api --without-intl-api"
-
-        case $bld in
-            (dbg) conf_args="$conf_args --enable-debug --disable-optimize --enable-profiling --enable-ctypes --enable-oom-breakpoint";;
-            # (dbg) conf_args="$conf_args --enable-debug=-ggdb3 --disable-optimize --enable-profiling --enable-ctypes";;
-            (pro) conf_args="$conf_args --enable-debug --enable-optimize --enable-profiling --enable-ctypes --enable-oom-breakpoint";;
-            (opt)
-                conf_args="$conf_args --enable-optimize --enable-profiling  --enable-ctypes --enable-official-branding --enable-oom-breakpoint"
-                if $enabledbg ; then
-                    conf_args="$conf_args --enable-debug=-ggdb3"
-                else
-                    conf_args="$conf_args --disable-debug  --enable-debug-symbols=-ggdb3"
-                fi
-                ;;
-            (oopt)
-                conf_args="$conf_args --enable-optimize --enable-profiling --enable-ctypes --enable-official-branding"
-                if $enabledbg ; then
-                    conf_args="$conf_args --enable-debug=-ggdb3"
-                else
-                    conf_args="$conf_args --disable-debug  --enable-debug-symbols=-ggdb3"
-                fi
-                ;;
-        esac
-
-        if $warning; then
-            conf_args="$conf_args --enable-warnings-as-errors"
-        fi
-        if $perf; then
-            conf_args="$conf_args --enable-perf"
-        fi
-    fi
-
-    if $wtest; then
-        conf_args="$conf_args --enable-tests"
-    else
-        conf_args="$conf_args --disable-tests"
-    fi
-
-    archx86=" --host=i686-unknown-linux-gnu --target=i686-unknown-linux-gnu"
     case $arch in
-        (x64)
-          ## We need this for nspr to avoid looking for stubs-32.h of
-          ## the glibc.
-          if $nspr ; then
-              conf_args="$conf_args --enable-64bit"
-          fi;;
-        (x86) conf_args="$conf_args $archx86";;
-        (arm)
-          # Native ARM cross-compilation
-          # conf_args="$conf_args --build=x86_64-unknown-linux-gnu --build=armv7l-unknown-linux-gnueabi --target=armv7l-unknown-linux-gnueabi"
-          conf_args="$conf_args --enable-simulator=arm $archx86";;
-        (arm64)
-          conf_args="$conf_args --enable-simulator=arm64";;
-        (mips)
-          conf_args="$conf_args --enable-simulator=mips $archx86";;
-        (mips32)
-          conf_args="$conf_args --enable-simulator=mips32 $archx86";;
-        (none)
-          conf_args="$conf_args --disable-ion --enable-64bit";;
-        (none32)
-          conf_args="$conf_args --disable-ion $archx86";;
+        (x86|arm|mips|mips32|none32) is32b=true;;
+        (*) is32b=false;;
     esac
+    sed -n '/true / { s/true //; p; }' <<EOF
+true --prefix=$instdir
+$(cond "$fuzz") --enable-posix-nspr-emulation
+$(cond "$fuzz") --enable-valgrind
+$(cond "$fuzz") --enable-gczeal
+$(cond "$fuzz") --disable-tests
+$(cond "$fuzz") --disable-profiling
+$(cond "$fuzz") --enable-debug
+$(cond "$fuzz") --enable-optimize
+# --with-system-jpeg --with-system-zlib --with-system-bz2 --disable-crashreporter --disable-necko-wifi --disable-installer --disable-updater"
+$(cond "$firefox") --enable-application=browser
+$(cond "$firefox") --disable-install-strip
+$(cond "$firefox") --enable-js-shell
+$(cond "$firefox || $shell") --disable-jemalloc
+$(cond "$firefox || $shell") --enable-valgrind
+$(for extra in $NIX_EXTRA_CONFIGURE_ARGS; do
+    echo "$(cond "$fuzz || $shell") $extra"
+done)
+# conf_args="$conf_args --disable-gstreamer --disable-pulseaudio"
+$(cond "$firefox || $nspr") --disable-pulseaudio
+$(cond "$shell") --enable-nspr-build
+$(cond "$oomCheck") --enable-oom-backtrace
+$(cond "$deterministic") --enable-more-deterministic
+$(cond "$gczeal") --enable-gczeal
+$(cond "$tracelog") --enable-trace-logging
+$(cond "$thm") --enable-thm
+$(cond "$ggc") --enable-exact-rooting
+$(cond "$ggc") --enable-gcgenerational
+$(cond "$cgc") --enable-gccompacting
+$(cond "$asan || $ubsan") --enable-address-sanitizer
+$(cond "$msan") --enable-memory-sanitizer
+$(cond "$tsan") --enable-thread-sanitizer
+$(cond "$spew") --enable-jitspew
+false --disable-masm-verbose
+$(cond "$noion") --disable-ion
+$(cond "$logref") --enable-logrefcnt
+$(cond "! $nspr") --enable-ctypes
+$(cond "! $nspr") --enable-oom-breakpoint
 
-    case $arch in
-        (x64|none)
-            conf_args="$conf_args";; # --enable-rust
-        (*)
-        ;;
-        # conf_args="$conf_args --disable-rust";;
-    esac
+$(cond "$dbg || $pro || $enabledbg") --enable-debug=-ggdb3
+$(cond "($opt || $oopt) && ! $enabledbg") --enable-debug-symbols=-ggdb3
+$(cond "$odbg || (($opt || $oopt) && ! $enabledbg)") --disable-debug
+$(cond "$dbg") --disable-optimize
+$(cond "$pro || $opt || $oopt") --enable-optimize
+$(cond "$odbg") --enable-optimize='-g -Og'
+true --enable-profiling
+$(cond "$oopt || $perf") --enable-release
 
-    echo "$conf_args"
+$(cond "! $nspr && $warning") --enable-warnings-as-errors
+$(cond "! $nspr && $perf") --enable-perf
+
+$(cond "$wtest") --enable-tests
+$(cond "! $wtest") --disable-tests
+
+$(cond "$nspr && test $arch = x64") --enable-64bit
+$(cond "$is32b") --host=i686-unknown-linux-gnu
+$(cond "$is32b") --target=i686-unknown-linux-gnu
+$(cond "test $arch = arm") --enable-simulator=arm
+$(cond "test $arch = arm64") --enable-simulator=arm64
+$(cond "test $arch = mips") --enable-simulator=mips
+$(cond "test $arch = mips32") --enable-simulator=mips32
+$(cond "test $arch = none") --disable-ion
+$(cond "test $arch = none") --enable-64bit
+$(cond "test $arch = none32") --disable-ion
+
+# Generate a compile_commands.json file in addition to the usual makefiles.
+# see https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/Build_Documentation#Developer_(debug)_build
+$(cond "$shell") --enable-build-backends=CompileDB,FasterMake,RecursiveMake
+EOF
 }
 
 # TODO use trap here !
@@ -589,7 +514,7 @@ for cc in $cc_sel; do
     ## commands in the nix-shell.
     if ! $IN_MAKE_SH; then
         # SILENT=true;
-        run $0 $arch-$cc-$task "$@";
+        run $0 $arch-$bld-$cc-$task "$@";
         continue;
     fi
 
@@ -656,7 +581,7 @@ for phase in $phase_sel_case; do
             cd -
             ;;
         (cfg)
-            conf_args=$(generate_conf_args)
+            conf_args=$(generate_conf_args | tr -s '\n' ' ')
             phase="configure"
             cd $builddir;
             # export HOST_LDFLAGS="-rpath $builddir/dist/bin"
@@ -666,6 +591,12 @@ for phase in $phase_sel_case; do
             ;;
 
         (machcfg)
+            echo "Enable telemetry in $MOZBUILD_STATE_PATH/machrc"
+            mkdir -p $MOZBUILD_STATE_PATH
+            cat >$MOZBUILD_STATE_PATH/machrc <<EOF
+[build]
+telemetry = true
+EOF
             echo "Generate MOZCONFIG: $MOZCONFIG"
             cat >$MOZCONFIG <<EOF
 # Do not source automation scripts, but read them to reverse engineer options
@@ -678,9 +609,7 @@ $(cat $MOZCONFIG_TEMPLATE)
 # Content produced by make.sh generate_conf_args function
 mk_add_options MOZ_OBJDIR=$builddir
 mk_add_options AUTOCLOBBER=1
-$(for opt in $(generate_conf_args); do
-   echo "ac_add_options $opt";
-done)
+$(generate_conf_args | sed 's/^/ac_add_options /')
 EOF
             ;;
 
@@ -699,6 +628,7 @@ EOF
             ;;
 
         (make)
+            export CXXFLAGS="--expensive-definedness-checks=yes"
             if test -z "$args"; then
                 args="-skj8";
             fi
@@ -752,7 +682,7 @@ EOF
         (chki)
             # check ion test directory.
             #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
-            run python $srcdir/jit-test/jit_test.py --ion-tbpl --no-slow "$shell" ion
+            run python2 $srcdir/jit-test/jit_test.py --ion-tbpl --no-slow "$shell" ion
             ;;
 
         (chka)
@@ -767,12 +697,26 @@ EOF
                 # TEST_PATH='/tests/MochiKit-1.4.2/tests/test_MochiKit-Style.html' EXTRA_TEST_ARGS='--debugger=gdb' make mochitest-plain
                 LC_ALL=C run make -C "$builddir" mochitest-$MOCHITEST
             else
-                run python $srcdir/tests/jstests.py --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
-                run python $srcdir/jit-test/jit_test.py $chkaOpt --no-slow "$@" "$shell"
+                run python2 $srcdir/tests/jstests.py --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
+                run python2 $srcdir/jit-test/jit_test.py $chkaOpt --no-slow "$@" "$shell"
             fi
 
             kontinue=$kontinue_save
             ;;
+
+        (chkv)
+            # check ion test directory.
+            #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
+            chkaOpt="$chkaOpt --ion"
+            kontinue_save=$kontinue
+            kontinue=true
+
+            run python2 $srcdir/tests/jstests.py --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
+            run python2 $srcdir/jit-test/jit_test.py --valgrind $chkaOpt --no-slow "$@" "$shell"
+
+            kontinue=$kontinue_save
+            ;;
+
 
         (chksimd)
             # check ion test directory.
@@ -781,7 +725,7 @@ EOF
             kontinue_save=$kontinue
             kontinue=true
 
-            run python $srcdir/jit-test/jit_test.py $chkaOpt --args="--no-asmjs --ion-regalloc=backtracking" --no-slow "$@" "$shell" asm.js
+            run python2 $srcdir/jit-test/jit_test.py $chkaOpt --args="--no-asmjs --ion-regalloc=backtracking" --no-slow "$@" "$shell" asm.js
 
             kontinue=$kontinue_save
             ;;
@@ -789,31 +733,31 @@ EOF
 
         (chkt)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python $srcdir/tests/jstests.py --jitflags=ion -o -s --no-progress  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py --jitflags=ion -o -s --no-progress  $(readlink "$shell") "$@"
             else
-                run python $srcdir/jit-test/jit_test.py --ion -s -f -o "$shell" "$@"
+                run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o "$shell" "$@"
             fi
             ;;
 
         (chkrr)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python $srcdir/tests/jstests.py --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
             else
-                run python $srcdir/jit-test/jit_test.py --ion -s -f -o -G "$shell" "$@"
+                run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o -G "$shell" "$@"
             fi
             ;;
 
         (chktt)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python $srcdir/tests/jstests.py --jitflags=all -o -s --no-progress  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py --jitflags=all -o -s --no-progress  $(readlink "$shell") "$@"
             else
-                run python $srcdir/jit-test/jit_test.py --tbpl -s -f -o "$shell" "$@"
+                run python2 $srcdir/jit-test/jit_test.py --tbpl -s -f -o "$shell" "$@"
             fi
             ;;
 
         (chkgdb)
             cd $srcdir
-            run python $srcdir/gdb/run-tests.py --gdb=$(type -P gdb) --srcdir=$topsrcdir --builddir=$builddir/js/src/gdb --testdir=$srcdir/gdb/tests $builddir "$@"
+            run python2 $srcdir/gdb/run-tests.py --gdb=$(type -P gdb) --srcdir=$topsrcdir --builddir=$builddir/js/src/gdb --testdir=$srcdir/gdb/tests $builddir "$@"
             cd -
             ;;
 
@@ -833,6 +777,7 @@ EOF
             ;;
 
         (shell)
+            export PATH=$PATH:~/.nix-profile/bin/:/var/run/current-system/sw/bin/
             run "$@"
             ;;
 
@@ -887,7 +832,7 @@ EOF
                     (*) tests="$tests $i";;
                 esac
             done
-            run python $srcdir/jit-test/jit_test.py -w /dev/null --no-progress --write-failure-output -o --jitflags="" --args="$args" "$shell" $tests $debug
+            run python2 $srcdir/jit-test/jit_test.py -w /dev/null --no-progress --write-failure-output -o --jitflags="" --args="$args" "$shell" $tests $debug
             ;;
 
         (runi)
