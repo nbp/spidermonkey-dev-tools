@@ -52,7 +52,7 @@ task=""
 while test "$arg" != "$oldarg"; do
     ctx_p=false;
     case ${arg%%-*} in
-        (x86|x64|arm|arm64|mips|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}"; ctx_p=true;;
+        (x86|x64|arm|arm64|mips64|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}"; ctx_p=true;;
         (dbg|odbg|pro|opt|oopt) bld_sel="$bld_sel ${arg%%-*}"; ctx_p=true;;
         (gcc*|clang*) cc_sel="$cc_sel ${arg%%-*}"; ctx_p=true;;
         (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber)
@@ -331,7 +331,7 @@ generate_conf_args() {
     fi
     machine=$(uname -m)
     case $arch in
-        (x86|arm|mips|mips32|none32) is32b=true;;
+        (x86|arm|mips32|none32) is32b=true;;
         (*) is32b=false;;
     esac
     sed -n '/true / { s/true //; p; }' <<EOF
@@ -394,7 +394,7 @@ $(cond "$is32b -a $machine = x86_64") --host=i686-unknown-linux-gnu
 $(cond "$is32b -a $machine = x86_64") --target=i686-unknown-linux-gnu
 $(cond "test $arch = arm -a $machine = x86_64") --enable-simulator=arm
 $(cond "test $arch = arm64 -a $machine = x86_64") --enable-simulator=arm64
-$(cond "test $arch = mips") --enable-simulator=mips
+$(cond "test $arch = mips64") --enable-simulator=mips64
 $(cond "test $arch = mips32") --enable-simulator=mips32
 $(cond "test $arch = none") --disable-ion
 $(cond "test $arch = none") --enable-64bit
@@ -511,9 +511,9 @@ for cc in $cc_sel; do
     nativeArch=$arch
     case $(uname -m) in
         (x86_64)
-            if test $arch = "arm" -o $arch = "mips" -o $arch = "mips32" -o $arch = "none32"; then
+            if test $arch = "arm" -o $arch = "mips32" -o $arch = "none32"; then
                 nativeArch=x86
-            elif test $arch = "arm64" -o $arch = "none"; then
+            elif test $arch = "arm64" -o $arch = "mips64" -o $arch = "none"; then
                 nativeArch=x64
             fi;;
         (aarch64)
