@@ -43,6 +43,7 @@ badexitcode=
 nix=true
 fhs=false
 impure=false
+nocl=false
 arg=$1; shift;
 oldarg=
 # Record if this is a nix-shel context, otherwise this is a task argument.
@@ -85,6 +86,7 @@ while test "$arg" != "$oldarg"; do
         (thm) thm=true;;
         (logref) logref=true;;
         (impure) impure=true;;
+        (nocl) nocl=true;;
         (bisect_segv_run) bisect=run; badexitcode=139; last=run; phase_sel="$phase_sel $last";;
         (bisect_trap_run) bisect=run; badexitcode=133; last=run; phase_sel="$phase_sel $last";;
         (bisect_success_run) bisect=run; badexitcode=0; last=run; phase_sel="$phase_sel $last";;
@@ -370,6 +372,7 @@ $(cond "$noion") --disable-ion
 $(cond "$logref") --enable-logrefcnt
 $(cond "! $nspr") --enable-ctypes
 $(cond "! $nspr") --enable-oom-breakpoint
+$(cond "$nocl") --disable-cranelift
 
 $(cond "$dbg || $pro || $enabledbg") --enable-debug=-ggdb3
 $(cond "($opt || $oopt) && ! $enabledbg") --enable-debug-symbols=-ggdb3
