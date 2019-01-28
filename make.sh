@@ -712,7 +712,7 @@ EOF
                 # TEST_PATH='/tests/MochiKit-1.4.2/tests/test_MochiKit-Style.html' EXTRA_TEST_ARGS='--debugger=gdb' make mochitest-plain
                 LC_ALL=C run make -C "$builddir" mochitest-$MOCHITEST
             else
-                run python2 $srcdir/tests/jstests.py --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
+                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
                 run python2 $srcdir/jit-test/jit_test.py $chkaOpt --no-slow "$@" "$shell"
             fi
 
@@ -726,7 +726,7 @@ EOF
             kontinue_save=$kontinue
             kontinue=true
 
-            run python2 $srcdir/tests/jstests.py --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
+            run python2 $srcdir/tests/jstests.py --wpt=disabled --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
             run python2 $srcdir/jit-test/jit_test.py --valgrind $chkaOpt --no-slow "$@" "$shell"
 
             kontinue=$kontinue_save
@@ -748,7 +748,7 @@ EOF
 
         (chkt)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --jitflags=ion -o -s --no-progress  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress  $(readlink "$shell") "$@"
             else
                 run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o "$shell" "$@"
             fi
@@ -756,7 +756,7 @@ EOF
 
         (chkrr)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
             else
                 run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o -G "$shell" "$@"
             fi
@@ -764,7 +764,7 @@ EOF
 
         (chktt)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --jitflags=all -o -s --no-progress  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=all -o -s --no-progress  $(readlink "$shell") "$@"
             else
                 run python2 $srcdir/jit-test/jit_test.py --tbpl -s -f -o "$shell" "$@"
             fi
