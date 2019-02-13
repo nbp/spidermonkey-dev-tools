@@ -754,6 +754,14 @@ EOF
             fi
             ;;
 
+        (chkg)
+            if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
+                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress -g  $(readlink "$shell") "$@"
+            else
+                run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o -g "$shell" "$@"
+            fi
+            ;;
+
         (chkrr)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
                 run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
