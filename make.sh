@@ -712,7 +712,8 @@ EOF
                 # TEST_PATH='/tests/MochiKit-1.4.2/tests/test_MochiKit-Style.html' EXTRA_TEST_ARGS='--debugger=gdb' make mochitest-plain
                 LC_ALL=C run make -C "$builddir" mochitest-$MOCHITEST
             else
-                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
+                # disabled for ARM64 testing
+                # run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
                 run python2 $srcdir/jit-test/jit_test.py $chkaOpt --no-slow "$@" "$shell"
             fi
 
