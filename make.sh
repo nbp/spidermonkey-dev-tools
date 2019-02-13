@@ -350,7 +350,9 @@ $(cond "$firefox") --enable-js-shell
 $(cond "$firefox || $shell") --disable-jemalloc
 $(cond "$firefox || $shell") --enable-valgrind
 $(for extra in $NIX_EXTRA_CONFIGURE_ARGS; do
-    echo "$(cond "($fuzz || $shell) && test $machine = x86_64") $extra"
+    # removed "&& test $machine = x86_64" to be able to run the configure
+    # command on arm64 native compilation.
+    echo "$(cond "$fuzz || $shell") $extra"
 done)
 # conf_args="$conf_args --disable-gstreamer --disable-pulseaudio"
 $(cond "$firefox || $nspr") --disable-pulseaudio
