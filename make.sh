@@ -15,7 +15,6 @@ cc_sel=
 phase_sel=
 aphase_sel=
 kontinue=false
-firefox=false
 xpcshell=false
 nspr=false
 enabledbg=false
@@ -38,12 +37,18 @@ taskspooler=false
 warning=true
 perf=false
 wtest=false
+fuzzing=false
 bisect=
 badexitcode=
 nix=true
 fhs=false
 impure=false
 nocl=false
+nosm=false
+# mach --enable-application flags
+firefox=false
+js=false
+
 arg=$1; shift;
 oldarg=
 # Record if this is a nix-shel context, otherwise this is a task argument.
@@ -55,12 +60,12 @@ while test "$arg" != "$oldarg"; do
         (x86|x64|arm|arm64|mips64|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}"; ctx_p=true;;
         (dbg|odbg|pro|opt|oopt) bld_sel="$bld_sel ${arg%%-*}"; ctx_p=true;;
         (gcc*|clang*) cc_sel="$cc_sel ${arg%%-*}"; ctx_p=true;;
-        (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber)
+        (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|embenchen|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber)
             last="${arg%%-*}";
             phase_sel="$phase_sel $last";;
         (patch) aphase_sel="$aphase_sel ${arg%%-*}";;
         (k) kontinue=true;;
-        (ff) firefox=true;;
+        (fuzzing) fuzzing=true;;
         (fhs) fhs=true;;
         (ts) taskspooler=true;;
         (xpc) xpcshell=true;;
@@ -87,6 +92,9 @@ while test "$arg" != "$oldarg"; do
         (logref) logref=true;;
         (impure) impure=true;;
         (nocl) nocl=true;;
+        (nosm) nosm=true;;
+        (ff) firefox=true;;
+        (js) js=true;;
         (bisect_segv_run) bisect=run; badexitcode=139; last=run; phase_sel="$phase_sel $last";;
         (bisect_trap_run) bisect=run; badexitcode=133; last=run; phase_sel="$phase_sel $last";;
         (bisect_success_run) bisect=run; badexitcode=0; last=run; phase_sel="$phase_sel $last";;
@@ -212,14 +220,16 @@ run() {
           $(maybeExport XRE_NO_WINDOWS_CRASH_DIALOG)
           $(maybeExportPrefix MOZ_)
           $(maybeExportPrefix JIT_)
+          $(maybeExportPrefix ION_)
           $(maybeExportPrefix BP_)
           $(maybeExportPrefix XPCOM_)
+          $(maybeExportPrefix FUZZ)
           export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt;
           export IN_MAKE_SH=true;
           $(maybeExport IN_EMACS)
           export SHELL;
           $(maybeExport LD_LIBRARY_PATH)
-          $(maybeExport RUSTFLAGS)
+          $(maybeExportPrefix RUST)
           cd $PWD;
         "
         # Note: "cd $PWD;" is resolved with the path before the nix-shell, while
@@ -240,7 +250,7 @@ run() {
         # MOZ_LOG  MOZ_GDB_SLEEP
         cd $topsrcdir;
         NIX_SHELL_HOOK="$hook" \
-                      $NIX_SHELL "$RELEASE_NIX" \
+                      $NIX_SHELL --show-trace "$RELEASE_NIX" \
                       -A "gecko.$archAttr.$cc$fhsAttr" \
                       $pure --command "$command"
         cd -
@@ -336,7 +346,7 @@ generate_conf_args() {
     esac
     sed -n '/true / { s/true //; p; }' <<EOF
 true --prefix=$instdir
-$(cond "$fuzz") --enable-posix-nspr-emulation
+$(cond "$fuzz") --enable-nspr-build
 $(cond "$fuzz") --enable-valgrind
 $(cond "$fuzz") --enable-gczeal
 $(cond "$fuzz") --disable-tests
@@ -345,13 +355,23 @@ $(cond "$fuzz") --enable-debug
 $(cond "$fuzz") --enable-optimize
 # --with-system-jpeg --with-system-zlib --with-system-bz2 --disable-crashreporter --disable-necko-wifi --disable-installer --disable-updater"
 $(cond "$firefox") --enable-application=browser
+$(cond "$js") --enable-application=js
 $(cond "$firefox") --disable-install-strip
 $(cond "$firefox") --enable-js-shell
 $(cond "$firefox || $shell") --disable-jemalloc
 $(cond "$firefox || $shell") --enable-valgrind
+$(cond "$fuzzing") --enable-fuzzing
 $(for extra in $NIX_EXTRA_CONFIGURE_ARGS; do
     # removed "&& test $machine = x86_64" to be able to run the configure
     # command on arm64 native compilation.
+  #  case $cc in
+  #    (clang*)
+  #      case $extra in
+  #        (--with-clang-path=*) continue;;
+  #        (*) ;;
+  #      esac;;
+  #    (*) ;;
+  #  esac
     echo "$(cond "$fuzz || $shell") $extra"
 done)
 # conf_args="$conf_args --disable-gstreamer --disable-pulseaudio"
@@ -375,6 +395,7 @@ $(cond "$logref") --enable-logrefcnt
 $(cond "! $nspr") --enable-ctypes
 $(cond "! $nspr") --enable-oom-breakpoint
 $(cond "$nocl") --disable-cranelift
+$(cond "! $nosm") --enable-smoosh
 
 $(cond "$dbg || $pro || $enabledbg") --enable-debug=-ggdb3
 $(cond "($opt || $oopt) && ! $enabledbg") --enable-debug-symbols=-ggdb3
@@ -382,7 +403,6 @@ $(cond "$odbg || (($opt || $oopt) && ! $enabledbg)") --disable-debug
 $(cond "$dbg") --disable-optimize
 $(cond "$pro || $opt || $oopt") --enable-optimize
 $(cond "$odbg") --enable-optimize='-g -Og'
-true --enable-profiling
 $(cond "$oopt || $perf") --enable-release
 
 $(cond "! $nspr && $warning") --enable-warnings-as-errors
@@ -399,7 +419,6 @@ $(cond "test $arch = arm64 -a $machine = x86_64") --enable-simulator=arm64
 $(cond "test $arch = mips64") --enable-simulator=mips64
 $(cond "test $arch = mips32") --enable-simulator=mips32
 $(cond "test $arch = none") --disable-ion
-$(cond "test $arch = none") --enable-64bit
 $(cond "test $arch = none32") --disable-ion
 
 # Generate a compile_commands.json file in addition to the usual makefiles.
@@ -547,6 +566,7 @@ for cc in $cc_sel; do
 
     checkConfig=true
     case $phase_sel in
+        (*shell*) checkConfig=false;;
         (*runf*) checkConfig=false;;
         (*mach*)
           export AUTOCONF=$(which autoconf)
@@ -578,8 +598,8 @@ for cc in $cc_sel; do
     fi
 
 for phase in $phase_sel_case; do
-    args=
-    if test $last = $phase; then
+    args=""
+    if test "$last" = "$phase"; then
         args="$@"
     fi
 
@@ -705,7 +725,10 @@ EOF
         (chka)
             # check ion test directory.
             #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
-            chkaOpt="$chkaOpt --ion"
+            if $nosm; then smooshOpt=""
+            else smooshOpt="$chkaOpt --args=--smoosh"
+            fi
+            # chkaOpt="$chkaOpt --ion"
             kontinue_save=$kontinue
             kontinue=true
 
@@ -715,8 +738,8 @@ EOF
                 LC_ALL=C run make -C "$builddir" mochitest-$MOCHITEST
             else
                 # disabled for ARM64 testing
-                # run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
-                run python2 $srcdir/jit-test/jit_test.py $chkaOpt --no-slow "$@" "$shell"
+                run python2 $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
+                run python2 $srcdir/jit-test/jit_test.py $smooshOpt $chkaOpt --no-slow "$@" "$shell"
             fi
 
             kontinue=$kontinue_save
@@ -725,12 +748,15 @@ EOF
         (chkv)
             # check ion test directory.
             #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
-            chkaOpt="$chkaOpt --ion"
+            if $nosm; then smooshOpt=""
+            else smooshOpt="$chkaOpt --args=--smoosh"
+            fi
+            # chkaOpt="$chkaOpt --ion"
             kontinue_save=$kontinue
             kontinue=true
 
-            run python2 $srcdir/tests/jstests.py --wpt=disabled --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
-            run python2 $srcdir/jit-test/jit_test.py --valgrind $chkaOpt --no-slow "$@" "$shell"
+            run python2 $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
+            run python2 $srcdir/jit-test/jit_test.py $smooshOpt --valgrind $chkaOpt --no-slow "$@" "$shell"
 
             kontinue=$kontinue_save
             ;;
@@ -750,11 +776,22 @@ EOF
 
 
         (chkt)
-            if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress  $(readlink "$shell") "$@"
-            else
-                run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o "$shell" "$@"
+            if $nosm; then smooshOpt=""
+            else smooshOpt="$chkaOpt --args=--smoosh"
             fi
+            testIon=false
+            if $testIon; then jstOpts="--jitflags=ion"; jitOpts="--ion";
+            else jstOpts=""; jitOpts="";
+            fi
+            if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
+                run python2 $srcdir/tests/jstests.py $smooshOpt $jstOpts --wpt=disabled  -o -s --no-progress  $(readlink "$shell") "$@"
+            else
+                run python2 $srcdir/jit-test/jit_test.py $smooshOpt $jitOpts -s -f -o "$shell" "$@"
+            fi
+            ;;
+
+        (chkwc)
+            run python2 $srcdir/jit-test/jit_test.py --args=--wasm-compiler=cranelift "$shell" wasm
             ;;
 
         (chkg)
@@ -766,10 +803,13 @@ EOF
             ;;
 
         (chkrr)
+            if $nosm; then smooshOpt=""
+            else smooshOpt="$chkaOpt --args=--smoosh"
+            fi
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
+                run python2 $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
             else
-                run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o -G "$shell" "$@"
+                run python2 $srcdir/jit-test/jit_test.py $smooshOpt --ion -s -f -o -G "$shell" "$@"
             fi
             ;;
 
@@ -808,12 +848,36 @@ EOF
             ;;
 
         (runf|run)
-            if $firefox ; then
-              run "$builddir/dist/bin/firefox" "$@"
-            elif $xpcshell ; then
-              run "$builddir/dist/bin/xpcshell" "$@"
+            if $fuzzing; then
+              echo arguments 1: $1
+              echo arguments 2: $2
+              # FUZZER is a JS file which contains a top-level JS variable named
+              # `fuzzBuf` and a function named `JSFuzzIterate`.
+              : ${FUZZER=$1}
+              if test \! -f "$FUZZER"; then
+                  echo "Set the script which should be used for fuzzing on the command line"
+                  exit 1;
+              fi
+              export FUZZER
+              # FUZZ_DIR is the last argument of the command line and would be
+              # the directory / file where samples are added and checked.
+              : ${FUZZ_DIR=$2}
+              if test \! -d "$FUZZ_DIR"; then
+                  FUZZ_DIR=$(mktemp /tmp/js-libFuzzer-XXXXXX)/
+              fi
+              : ${FUZZ_TIMEOUT=5}
+              : ${FUZZ_MAX_LEN=32}
+              : ${FUZZ_ONLY_ASCII=1}
+              run "$shell -- -use_value_profile=1 -print_pcs=1 -timeout=${FUZZ_TIMEOUT} -max_len=${FUZZ_MAX_LEN} -only_ascii=${FUZZ_ONLY_ASCII} $FUZZ_DIR"
+              # -dict=js.dict   TODO: Create a js.dict file which contains all keywords.
             else
-              run "$shell" "$@"
+              if $firefox ; then
+                run "$builddir/dist/bin/firefox" "$@"
+              elif $xpcshell ; then
+                run "$builddir/dist/bin/xpcshell" "$@"
+              else
+                run "$shell" "$@"
+              fi
             fi
             ;;
 
@@ -906,6 +970,16 @@ EOF
             done
             phase="runi"
             kontinue=$kontinue_save
+            ;;
+
+        (embenchen)
+            checkForBenchmarks
+            cd ~/mozilla/embenchen/asm_v_wasm
+            export JS_SHELL=$shell
+            run python2 ./wasm_bench.py "$@"
+            unset JS_SHELL
+            cd -
+            afterBenchmark
             ;;
 
         (octane)
