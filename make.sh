@@ -251,10 +251,23 @@ run() {
         fi
         # MOZ_LOG  MOZ_GDB_SLEEP
         cd $topsrcdir;
-        NIX_SHELL_HOOK="$hook" \
-                      $NIX_SHELL --show-trace "$RELEASE_NIX" \
-                      -A "gecko.$archAttr.$cc$fhsAttr" \
-                      $pure --command "$command"
+        export NIX_SHELL_HOOK="$hook"
+        # Clear previous cache roots, to avoid keeping old derivations. Compiled
+        # content remains addressable from the nix-store.
+        test -e $builddir/.nix-roots && rm -rf $builddir/.nix-roots
+        mkdir $builddir/.nix-roots
+        # Cache instantiation of the nix-shell.
+        # See https://fzakaria.com/2020/08/11/caching-your-nix-shell.html
+        IN_NIX_SHELL=1 nix-instantiate --show-trace "$RELEASE_NIX" \
+                    -A "gecko.$archAttr.$cc$fhsAttr" \
+                    --add-root $builddir/.nix-roots/drv --indirect | \
+            xargs nix-store --query --references | \
+            xargs nix-store --realise 1>/dev/null \
+                  --add-root $builddir/.nix-roots/shell --indirect \
+        # Execute the nix-shell.
+        $NIX_SHELL --show-trace "$RELEASE_NIX" \
+                   -A "gecko.$archAttr.$cc$fhsAttr" \
+                   $pure --command "$command"
         cd -
     elif test -z "$TS"; then
         "$@"
