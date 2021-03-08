@@ -45,6 +45,7 @@ fhs=false
 impure=false
 nocl=false
 nosm=false
+telem=false
 # mach --enable-application flags
 firefox=false
 js=false
@@ -93,6 +94,7 @@ while test "$arg" != "$oldarg"; do
         (impure) impure=true;;
         (nocl) nocl=true;;
         (nosm) nosm=true;;
+        (telem) telem=true;;
         (ff) firefox=true;;
         (js) js=true;;
         (bisect_segv_run) bisect=run; badexitcode=139; last=run; phase_sel="$phase_sel $last";;
@@ -385,7 +387,8 @@ $(cond "$thm") --enable-thm
 $(cond "$ggc") --enable-exact-rooting
 $(cond "$ggc") --enable-gcgenerational
 $(cond "$cgc") --enable-gccompacting
-$(cond "$asan || $ubsan") --enable-address-sanitizer
+$(cond "$asan") --enable-address-sanitizer
+$(cond "$ubsan") --enable-undefined-sanitizer
 $(cond "$msan") --enable-memory-sanitizer
 $(cond "$tsan") --enable-thread-sanitizer
 $(cond "$spew") --enable-jitspew
@@ -420,6 +423,7 @@ $(cond "test $arch = mips64") --enable-simulator=mips64
 $(cond "test $arch = mips32") --enable-simulator=mips32
 $(cond "test $arch = none") --disable-ion
 $(cond "test $arch = none32") --disable-ion
+$(cond "test $arch = arm64") --enable-arm64-fjcvtzs
 
 # Generate a compile_commands.json file in addition to the usual makefiles.
 # see https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/Build_Documentation#Developer_(debug)_build
@@ -648,11 +652,12 @@ mk_add_options MOZ_OBJDIR=$builddir
 mk_add_options AUTOCLOBBER=1
 $(generate_conf_args | sed 's/^/ac_add_options /')
 EOF
+            run "$topsrcdir/mach" "create-mach-environment";
             ;;
 
         (src_mach)
             cd $topsrcdir;
-            run "./mach" "$@";
+            run "$topsrcdir/mach" "$@";
             ;;
 
         (mach)
@@ -719,14 +724,16 @@ EOF
         (chki)
             # check ion test directory.
             #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
-            run python2 $srcdir/jit-test/jit_test.py --ion --no-slow "$shell" ion
+            run python $srcdir/jit-test/jit_test.py --ion --no-slow "$shell" ion
             ;;
 
         (chka)
             # check ion test directory.
             #LC_ALL=C run make -C "$builddir" check-ion-test "$@"
-            if $nosm; then smooshOpt=""
-            else smooshOpt="$chkaOpt --args=--smoosh"
+            if $nosm; then thisChkaOpt=""
+            else thisChkaOpt="$chkaOpt --args=--smoosh"
+            fi
+            if $telem; then thisChkaOpt="$thisChkaOpt --args=--telemetry-dir=/tmp/"
             fi
             # chkaOpt="$chkaOpt --ion"
             kontinue_save=$kontinue
@@ -738,8 +745,8 @@ EOF
                 LC_ALL=C run make -C "$builddir" mochitest-$MOCHITEST
             else
                 # disabled for ARM64 testing
-                run python2 $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
-                run python2 $srcdir/jit-test/jit_test.py $smooshOpt $chkaOpt --no-slow "$@" "$shell"
+                run python $srcdir/tests/jstests.py $thisChkaOpt --wpt=disabled --jitflags=ion -F -t 10 "$@" $(readlink "$shell")
+                run python $srcdir/jit-test/jit_test.py $thisChkaOpt --no-slow "$@" "$shell"
             fi
 
             kontinue=$kontinue_save
@@ -755,8 +762,8 @@ EOF
             kontinue_save=$kontinue
             kontinue=true
 
-            run python2 $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
-            run python2 $srcdir/jit-test/jit_test.py $smooshOpt --valgrind $chkaOpt --no-slow "$@" "$shell"
+            run python $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --valgrind --jitflags=ion -F "$@" $(readlink "$shell")
+            run python $srcdir/jit-test/jit_test.py $smooshOpt --valgrind $chkaOpt --no-slow "$@" "$shell"
 
             kontinue=$kontinue_save
             ;;
@@ -769,7 +776,7 @@ EOF
             kontinue_save=$kontinue
             kontinue=true
 
-            run python2 $srcdir/jit-test/jit_test.py $chkaOpt --args="--no-asmjs --ion-regalloc=backtracking" --no-slow "$@" "$shell" asm.js
+            run python $srcdir/jit-test/jit_test.py $chkaOpt --args="--no-asmjs --ion-regalloc=backtracking" --no-slow "$@" "$shell" asm.js
 
             kontinue=$kontinue_save
             ;;
@@ -784,21 +791,21 @@ EOF
             else jstOpts=""; jitOpts="";
             fi
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py $smooshOpt $jstOpts --wpt=disabled  -o -s --no-progress  $(readlink "$shell") "$@"
+                run python $srcdir/tests/jstests.py $smooshOpt $jstOpts --wpt=disabled  -o -s --no-progress  $(readlink "$shell") "$@"
             else
-                run python2 $srcdir/jit-test/jit_test.py $smooshOpt $jitOpts -s -f -o "$shell" "$@"
+                run python $srcdir/jit-test/jit_test.py $smooshOpt $jitOpts -s -f -o "$shell" "$@"
             fi
             ;;
 
         (chkwc)
-            run python2 $srcdir/jit-test/jit_test.py --args=--wasm-compiler=cranelift "$shell" wasm
+            run python $srcdir/jit-test/jit_test.py --args=--wasm-compiler=cranelift "$shell" wasm
             ;;
 
         (chkg)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress -g  $(readlink "$shell") "$@"
+                run python $srcdir/tests/jstests.py --wpt=disabled --jitflags=ion -o -s --no-progress -g  $(readlink "$shell") "$@"
             else
-                run python2 $srcdir/jit-test/jit_test.py --ion -s -f -o -g "$shell" "$@"
+                run python $srcdir/jit-test/jit_test.py --ion -s -f -o -g "$shell" "$@"
             fi
             ;;
 
@@ -807,23 +814,23 @@ EOF
             else smooshOpt="$chkaOpt --args=--smoosh"
             fi
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
+                run python $srcdir/tests/jstests.py $smooshOpt --wpt=disabled --jitflags=ion -o -s --no-progress -g --debugger='rr record -h'  $(readlink "$shell") "$@"
             else
-                run python2 $srcdir/jit-test/jit_test.py $smooshOpt --ion -s -f -o -G "$shell" "$@"
+                run python $srcdir/jit-test/jit_test.py $smooshOpt --ion -s -f -o -G "$shell" "$@"
             fi
             ;;
 
         (chktt)
             if test $(cd $srcdir/tests; ls 2>/dev/null $(echo " $@" | sed 's/ -/ \\\\-/g') | wc -l) -gt 0; then
-                run python2 $srcdir/tests/jstests.py --wpt=disabled --jitflags=all -o -s --no-progress  $(readlink "$shell") "$@"
+                run python $srcdir/tests/jstests.py --wpt=disabled --jitflags=all -o -s --no-progress  $(readlink "$shell") "$@"
             else
-                run python2 $srcdir/jit-test/jit_test.py --tbpl -s -f -o "$shell" "$@"
+                run python $srcdir/jit-test/jit_test.py --tbpl -s -f -o "$shell" "$@"
             fi
             ;;
 
         (chkgdb)
             cd $srcdir
-            run python2 $srcdir/gdb/run-tests.py --gdb=$(type -P gdb) --srcdir=$topsrcdir --builddir=$builddir/js/src/gdb --testdir=$srcdir/gdb/tests $builddir "$@"
+            run python $srcdir/gdb/run-tests.py --gdb=$(type -P gdb) --srcdir=$topsrcdir --builddir=$builddir/js/src/gdb --testdir=$srcdir/gdb/tests $builddir "$@"
             cd -
             ;;
 
@@ -922,7 +929,7 @@ EOF
                     (*) tests="$tests $i";;
                 esac
             done
-            run python2 $srcdir/jit-test/jit_test.py -w /dev/null --no-progress --write-failure-output -o --jitflags="" --args="$args" "$shell" $tests $debug
+            run python $srcdir/jit-test/jit_test.py -w /dev/null --no-progress --write-failure-output -o --jitflags="" --args="$args" "$shell" $tests $debug
             ;;
 
         (runi)
@@ -976,7 +983,7 @@ EOF
             checkForBenchmarks
             cd ~/mozilla/embenchen/asm_v_wasm
             export JS_SHELL=$shell
-            run python2 ./wasm_bench.py "$@"
+            run python ./wasm_bench.py "$@"
             unset JS_SHELL
             cd -
             afterBenchmark
