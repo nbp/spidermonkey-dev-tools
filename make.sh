@@ -34,7 +34,7 @@ fuzz=false
 noion=false
 logref=false
 taskspooler=false
-warning=true
+warning=false # Set to false aas frequently forgotten.
 perf=false
 wtest=false
 fuzzing=false
@@ -61,7 +61,7 @@ while test "$arg" != "$oldarg"; do
         (x86|x64|arm|arm64|mips64|mips32|none|none32) arch_sel="$arch_sel ${arg%%-*}"; ctx_p=true;;
         (dbg|odbg|pro|opt|oopt) bld_sel="$bld_sel ${arg%%-*}"; ctx_p=true;;
         (gcc*|clang*) cc_sel="$cc_sel ${arg%%-*}"; ctx_p=true;;
-        (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|embenchen|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber)
+        (autoconf|cfg|make|chk|run|runf|runt|runi|chk?|chk??|chk???|chksimd|regen|mach|src_mach|machcfg|unagi|flame|octane|embenchen|ss|kk|aa|asmapps|asmubench|val|vgdb|rr|shell|clobber|format)
             last="${arg%%-*}";
             phase_sel="$phase_sel $last";;
         (patch) aphase_sel="$aphase_sel ${arg%%-*}";;
@@ -87,6 +87,7 @@ while test "$arg" != "$oldarg"; do
         (fuzz) fuzz=true;;
         (noion) noion=true;;
         (nowarn) warning=false;;
+        (warn) warning=true;;
         (perf) perf=true;;
         (wtest) wtest=true;;
         (thm) thm=true;;
@@ -256,6 +257,7 @@ run() {
         # content remains addressable from the nix-store.
         test -e $builddir/.nix-roots && rm -rf $builddir/.nix-roots
         mkdir $builddir/.nix-roots
+
         # Cache instantiation of the nix-shell.
         # See https://fzakaria.com/2020/08/11/caching-your-nix-shell.html
         IN_NIX_SHELL=1 nix-instantiate --show-trace "$RELEASE_NIX" \
@@ -264,6 +266,7 @@ run() {
             xargs nix-store --query --references | \
             xargs nix-store --realise 1>/dev/null \
                   --add-root $builddir/.nix-roots/shell --indirect \
+
         # Execute the nix-shell.
         $NIX_SHELL --show-trace "$RELEASE_NIX" \
                    -A "gecko.$archAttr.$cc$fhsAttr" \
@@ -361,7 +364,8 @@ generate_conf_args() {
     esac
     sed -n '/true / { s/true //; p; }' <<EOF
 true --prefix=$instdir
-$(cond "$fuzz") --enable-nspr-build
+true --disable-bootstrap
+$(cond "$js") --enable-nspr-build
 $(cond "$fuzz") --enable-valgrind
 $(cond "$fuzz") --enable-gczeal
 $(cond "$fuzz") --disable-tests
@@ -391,7 +395,6 @@ $(for extra in $NIX_EXTRA_CONFIGURE_ARGS; do
 done)
 # conf_args="$conf_args --disable-gstreamer --disable-pulseaudio"
 $(cond "$firefox || $nspr") --disable-pulseaudio
-$(cond "$shell") --enable-nspr-build
 $(cond "$oomCheck") --enable-oom-backtrace
 $(cond "$deterministic") --enable-more-deterministic
 $(cond "$gczeal") --enable-gczeal
@@ -413,8 +416,9 @@ $(cond "! $nspr") --enable-oom-breakpoint
 $(cond "$nocl") --disable-cranelift
 $(cond "! $nosm") --enable-smoosh
 
-$(cond "$dbg || $pro || $enabledbg") --enable-debug=-ggdb3
-$(cond "($opt || $oopt) && ! $enabledbg") --enable-debug-symbols=-ggdb3
+# TODO: Use -ggdb3 when not building firefox, as -ggdb3 still output macro definitions after pre-processing.
+$(cond "$dbg || $pro || $enabledbg") --enable-debug=-ggdb2
+$(cond "($opt || $oopt) && ! $enabledbg") --enable-debug-symbols=-ggdb2
 $(cond "$odbg || (($opt || $oopt) && ! $enabledbg)") --disable-debug
 $(cond "$dbg") --disable-optimize
 $(cond "$pro || $opt || $oopt") --enable-optimize
@@ -585,7 +589,7 @@ for cc in $cc_sel; do
     case $phase_sel in
         (*shell*) checkConfig=false;;
         (*runf*) checkConfig=false;;
-        (*mach*)
+        (*mach*|*src_mach*|*format*)
           export AUTOCONF=$(which autoconf)
           export MOZBUILD_STATE_PATH=$builddir/.mozbuild;
           export MOZCONFIG=$builddir/.mozconfig;
@@ -661,6 +665,7 @@ EOF
 $(cat $MOZCONFIG_TEMPLATE)
 
 # Content produced by make.sh generate_conf_args function
+mk_add_options MOZ_SRC=$topsrcdir
 mk_add_options MOZ_OBJDIR=$builddir
 mk_add_options AUTOCLOBBER=1
 $(generate_conf_args | sed 's/^/ac_add_options /')
@@ -680,6 +685,18 @@ EOF
             else
                 run "$topsrcdir/mach" --log-no-times "$@" | sed 's/^TIER: pre-export export compile misc libs tools //';
             fi
+            set -x
+            if $firefox || $nspr; then
+                :;
+            else
+                if test -d "$builddir/js/src"; then
+                    test -e "$shell" && rm -f "$shell"
+                    ln -sf  "$builddir/js/src/js" "$shell"
+                else
+                    test -e "$shell" && rm -f "$shell"
+                    ln -sf  "$builddir/js" "$shell"
+                fi
+            fi
             ;;
 
         (make)
@@ -692,6 +709,7 @@ EOF
                 export CXXFLAGS="-fsanitize=$SANFLAGS -fno-sanitize-recover=$SANFLAGS"
                 export CFLAGS="-fsanitize=$SANFLAGS -fno-sanitize-recover=$SANFLAGS"
             fi
+
             case $arch in
                 # (arm)
                 #     export PATH=$PATH:$HOME/.nix-profile/bin
@@ -728,6 +746,31 @@ EOF
                     ln -sf  "$builddir/js" "$shell"
                 fi
             fi
+            ;;
+
+        (format)
+            clang_dir=$(grep exec $(which clang) | sed -ne '/exec/ { s/^.*exec //; s,/bin/clang.*,,; p; q; }')
+            rm -rf $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/bin || true;
+            mkdir -p $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/;
+            ln -s $clang_dir/bin $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/bin;
+            ( echo "make.sh: Watch for file modification to replace clang-format files.";
+              stdbuf -oL -eL inotifywait -mre create --format '%w%f' $MOZBUILD_STATE_PATH |
+                  while read file; do
+                      ## echo "make.sh: $file"
+                      if test $file = $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/bin/run-clang-tidy ; then
+                          set -x
+                          echo "make.sh: Replacing clang-tools binaries."
+                          while test \! -h $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/bin ; do
+                              rm -rf $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/bin || true;
+                              mkdir -p $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/;
+                              ln -s $clang_dir/bin $MOZBUILD_STATE_PATH/clang-tools/clang-tidy/bin;
+                          done
+                          break
+                      fi
+                  done
+              )&
+            cd $topsrcdir;
+            run "$topsrcdir/mach" -v "clang-format" "$@";
             ;;
 
         (chk)
